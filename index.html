@@ -79,7 +79,7 @@
     <div class="ipucu">Video takılırsa HD 720 seçin.</div>
   </details>
   <div class="ipucu">Ana ekrana eklemek için tarayıcı menüsünden “Ana ekrana ekle”yi seçin.</div>
-  <div class="ipucu" id="surum">Sürüm 3</div>
+  <div class="ipucu" id="surum">Sürüm 4</div>
 </div>
 
 <div id="sahne" hidden>
@@ -221,11 +221,12 @@ function cazibeTuru(e, ad) {
   if (["attraction", "theme_park", "zoo", "museum", "viewpoint"].includes(e.tourism)) return "gezi";
   return null;
 }
-async function overpass(sorgu) {
-  for (const s of OVERPASS) {
-    try { return (await getir(s, { method: "POST", body: new URLSearchParams({ data: sorgu }) }, 40000)).elements || []; } catch (e) { }
-  }
-  return null;
+let overpassKapali = false;
+async function overpass(sorgu, sureMs = 14000) {   // sunucular aynı anda denenir, ilk yanıt veren kazanır
+  if (overpassKapali) return null;
+  try {
+    return await Promise.any(OVERPASS.map(s => getir(s, { method: "POST", body: new URLSearchParams({ data: sorgu }) }, sureMs).then(d => d.elements || [])));
+  } catch (e) { overpassKapali = true; return null; }   // hiçbiri yanıt vermedi: bu video için yedek yönteme geç
 }
 const kutu = (lat, lon, r) => { const dy = r / 111320, dx = r / (111320 * Math.cos(lat * RAD)); return `${lon - dx},${lat + dy},${lon + dx},${lat - dy}`; };
 const elKonum = el => [el.lat ?? (el.center || {}).lat, el.lon ?? (el.center || {}).lon];
@@ -235,13 +236,14 @@ async function cevreYerler(lat, lon, enCok, ilerle) {
   for (const r of [1500, 4000, 10000]) {
     ilerle(`Çevre aranıyor (${r / 1000} km)…`);
     const a = `(around:${r},${lat},${lon})`;
-    let ham = await overpass(`[out:json][timeout:25];(nwr${a}["amenity"~"^(hospital|clinic|pharmacy|school|university|fuel)$"];
+    let ham = await overpass(`[out:json][timeout:12];(nwr${a}["amenity"~"^(hospital|clinic|pharmacy|school|university|fuel)$"];
       nwr${a}["amenity"="place_of_worship"]["religion"="muslim"];nwr${a}["shop"~"^(supermarket|mall)$"];
       node${a}["highway"="bus_stop"];nwr${a}["railway"="station"];);out center tags;`);
     if (ham) {
       ham = ham.map(el => { const t = el.tags || {}, [la, lo] = elKonum(el);
         return { ad: t.name, tur: t.amenity || t.shop || t.highway || (t.railway ? "station" : null), lat: la, lon: lo }; });
-    } else {   // yedek: Nominatim
+    } else {   // yedek: Nominatim (yavaş olduğu için en küçük halka atlanır)
+      if (r < 4000) continue;
       ham = [];
       for (const [kelime, tur] of [["hospital", "hospital"], ["school", "school"], ["supermarket", "supermarket"], ["pharmacy", "pharmacy"], ["bus stop", "bus_stop"], ["fuel", "fuel"]]) {
         for (const d of await nomi({ q: kelime, viewbox: kutu(lat, lon, r), bounded: 1, limit: 40 }))
@@ -260,9 +262,9 @@ async function cevreYerler(lat, lon, enCok, ilerle) {
 async function cazibeMerkezleri(lat, lon, r, enCok, ilerle) {
   ilerle("Cazibe merkezleri aranıyor…");
   const a = `(around:${r},${lat},${lon})`;
-  let ham = await overpass(`[out:json][timeout:40];(nwr${a}["leisure"~"^(park|nature_reserve|golf_course)$"]["name"];
+  let ham = await overpass(`[out:json][timeout:20];(nwr${a}["leisure"~"^(park|nature_reserve|golf_course)$"]["name"];
     nwr${a}["natural"="water"]["name"];way${a}["waterway"~"^(canal|river)$"]["name"];nwr${a}["landuse"="residential"]["name"];
-    nwr${a}["tourism"~"^(attraction|theme_park|zoo|museum)$"]["name"];);out tags center bb;`);
+    nwr${a}["tourism"~"^(attraction|theme_park|zoo|museum)$"]["name"];);out tags center bb;`, 22000);
   if (ham) {
     ham = ham.map(el => { const t = el.tags || {}, [la, lo] = elKonum(el), b = el.bounds;
       return { ad: t.name || "", tur: cazibeTuru(t, t.name || ""), lat: la, lon: lo,
@@ -580,6 +582,7 @@ function kareHizli(t) { t = sinirla(t, 0, S.sure - 0.001); kamera(t); viewer.ren
 
 /* ---------------- Hazırlık ---------------- */
 async function hazirla(a, ilerle = () => { }) {
+  overpassKapali = false;
   ilerle("Parsel TKGM'den alınıyor…", 0.03);
   const p = await parselGetir(a.mahId, a.ada, a.parsel);
   p.il = p.il || a.il; p.ilce = p.ilce || a.ilce; p.mahalle = p.mahalle || a.mahalle;
