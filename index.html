@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Parsel Video">
+<meta name="theme-color" content="#0c1016">
+<title>Parsel Video</title>
+<script src="https://cdn.jsdelivr.net/npm/cesium@1.147.0/Build/Cesium/Cesium.js"></script>
+<style>
+  :root{--zemin:#0c1016;--kutu:#161c25;--cizgi:#2a3340;--yazi:#f2f4f7;--soluk:#9aa6b5;--altin:#d9b25a;--kirmizi:#ff3b30}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--zemin);color:var(--yazi);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,"DejaVu Sans",Arial,sans-serif;-webkit-text-size-adjust:100%}
+  #form{max-width:560px;margin:0 auto;padding:calc(18px + env(safe-area-inset-top,0px)) 18px calc(28px + env(safe-area-inset-bottom,0px))}
+  h1{font-size:30px;margin:6px 0 2px;letter-spacing:-.01em}
+  .alt{color:var(--altin);font-weight:700;font-size:16px;margin-bottom:18px}
+  label{display:block;font-size:15px;color:var(--soluk);font-weight:600;margin:14px 0 6px}
+  select,input,button{width:100%;font:inherit;font-size:19px;color:var(--yazi);background:var(--kutu);border:1.5px solid var(--cizgi);
+    border-radius:12px;padding:14px 14px;min-height:56px;appearance:none;-webkit-appearance:none}
+  select{background-image:linear-gradient(45deg,transparent 50%,var(--soluk) 50%),linear-gradient(135deg,var(--soluk) 50%,transparent 50%);
+    background-position:calc(100% - 22px) 55%,calc(100% - 15px) 55%;background-size:7px 7px;background-repeat:no-repeat;padding-right:40px}
+  select:focus,input:focus,button:focus-visible{outline:3px solid var(--altin);outline-offset:1px}
+  .iki{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .ana{margin-top:22px;background:var(--altin);color:#17130a;border:0;font-weight:800;font-size:21px;min-height:62px}
+  .ana:disabled{opacity:.5}
+  .ikincil{background:transparent}
+  #durum{margin-top:16px;font-size:17px;line-height:1.45;min-height:48px;color:var(--yazi)}
+  #durum.hata{color:#ff8a80}
+  #cubuk{height:8px;border-radius:4px;background:var(--cizgi);overflow:hidden;margin-top:10px}
+  #cubuk i{display:block;height:100%;width:0;background:var(--altin);transition:width .2s}
+  details{margin-top:18px;border:1.5px solid var(--cizgi);border-radius:12px;padding:6px 14px 14px}
+  summary{font-size:17px;font-weight:700;padding:10px 0;cursor:pointer}
+  .ipucu{font-size:14px;color:var(--soluk);margin-top:8px;line-height:1.4}
+  #sahne{position:fixed;inset:0;background:#000;display:flex;flex-direction:column;z-index:5}
+  #cikti{flex:1;min-height:0;width:100%;object-fit:contain;background:#000}
+  #dugmeler{display:flex;gap:8px;padding:10px 10px calc(10px + env(safe-area-inset-bottom,0px));background:var(--zemin)}
+  #dugmeler button{min-height:54px;font-size:17px;font-weight:700;padding:8px 6px}
+  #bilgi{padding:8px 14px 0;font-size:15px;color:var(--soluk);background:var(--zemin);min-height:28px}
+  #harita{position:fixed;left:0;top:0;opacity:0;pointer-events:none;z-index:-1}
+  .cesium-viewer-bottom,.cesium-viewer-toolbar{display:none!important}
+  #harita .cesium-viewer,#harita .cesium-viewer-cesiumWidgetContainer,#harita .cesium-widget,#harita canvas{width:100%;height:100%;display:block}
+  [hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div id="form">
+  <h1>Parsel Video</h1>
+  <div class="alt" id="formMarka"></div>
+
+  <label for="il">İl</label><select id="il"><option>Yükleniyor…</option></select>
+  <label for="ilce">İlçe</label><select id="ilce"></select>
+  <label for="mahAra">Mahalle / köy</label>
+  <input id="mahAra" type="search" placeholder="Adını yazarak süzün (isteğe bağlı)" autocomplete="off">
+  <select id="mah" style="margin-top:8px"></select>
+  <div class="iki">
+    <div><label for="ada">Ada</label><input id="ada" inputmode="numeric" autocomplete="off" placeholder="0"></div>
+    <div><label for="parsel">Parsel</label><input id="parsel" inputmode="numeric" autocomplete="off"></div>
+  </div>
+  <div class="iki">
+    <div><label for="bicim">Biçim</label><select id="bicim"><option value="dikey">Dikey (telefon)</option><option value="yatay">Yatay</option></select></div>
+    <div><label for="uzunluk">Süre</label><select id="uzunluk"><option value="uzun">Uzun (~45 sn)</option><option value="kisa">Kısa (~25 sn)</option></select></div>
+  </div>
+
+  <button class="ana" id="basla">Videoyu hazırla</button>
+  <div id="durum"></div>
+  <div id="cubuk" hidden><i></i></div>
+
+  <details>
+    <summary>Kartvizit ve kalite</summary>
+    <label for="kFirma">Firma</label><input id="kFirma">
+    <label for="kIsim">Ad soyad</label><input id="kIsim">
+    <label for="kTel">Telefon</label><input id="kTel" inputmode="tel">
+    <label for="kalite">Kalite</label>
+    <select id="kalite"><option value="720">HD 720 (hızlı)</option><option value="1080">Full HD 1080</option></select>
+    <div class="ipucu">Video takılırsa HD 720 seçin.</div>
+  </details>
+  <div class="ipucu">Ana ekrana eklemek için tarayıcı menüsünden “Ana ekrana ekle”yi seçin.</div>
+</div>
+
+<div id="sahne" hidden>
+  <canvas id="cikti"></canvas>
+  <div id="bilgi"></div>
+  <div id="dugmeler">
+    <button id="bOynat">▶ Oynat</button>
+    <button id="bKaydet" class="ana" style="margin:0">⏺ Kaydet</button>
+    <button id="bPaylas" hidden>Paylaş</button>
+    <button id="bIndir" hidden>İndir</button>
+    <button id="bYeni" class="ikincil">Yeni</button>
+  </div>
+</div>
+<div id="harita"></div>
+
+<script>
+"use strict";
+/* ==================================================================
+   PARSEL VİDEO — telefonda çalışan sürüm
+   Şehir merkezinden arsaya uçar, çevreyi tek tek gösterir, parsele iner,
+   kartvizitle kapanır. Her şey tek bir tuvale çizilir; o tuval kaydedilir.
+   ================================================================== */
+const KART = { firma: "Ankara Arazi Ofisi", isim: "Coşkun Özbek", tel: "0532 382 71 14" };
+const TKGM = "https://cbsapi.tkgm.gov.tr/megsiswebapi.v3/api";
+const OVERPASS = ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter", "https://overpass.private.coffee/api/interpreter"];
+const NOMINATIM = "https://nominatim.openstreetmap.org/search";
+const OSRM = "https://router.project-osrm.org/route/v1/driving/";
+const UYDU = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
+const MERKEZ = { ankara: { ad: "Kızılay", lat: 39.9208, lon: 32.8541 } };   // il adı (sade) → bilinen merkez
+const YAZITIPI = 'system-ui,-apple-system,"Segoe UI",Roboto,"DejaVu Sans",Arial,sans-serif';
+
+const $ = id => document.getElementById(id);
+const bekle = ms => new Promise(r => setTimeout(r, ms));
+const sinirla = (x, a, b) => Math.min(b, Math.max(a, x));
+const ara = (a, b, k) => a + (b - a) * k;
+const yumusak = x => { x = sinirla(x, 0, 1); return x * x * (3 - 2 * x); };
+const RAD = Math.PI / 180;
+
+function trSade(s) {
+  const h = { "İ": "i", "I": "i", "ı": "i", "Ş": "s", "ş": "s", "Ğ": "g", "ğ": "g", "Ü": "u", "ü": "u", "Ö": "o", "ö": "o", "Ç": "c", "ç": "c", "Â": "a", "â": "a", "Î": "i", "î": "i", "Û": "u", "û": "u" };
+  return String(s || "").trim().replace(/[İIıŞşĞğÜüÖöÇçÂâÎîÛû]/g, c => h[c]).toLowerCase()
+    .replace(/\s+(mahallesi|mah\.?|koyu|mh\.?)$/, "").replace(/\s+/g, " ");
+}
+function mesafeM(lat1, lon1, lat2, lon2) {
+  const a = Math.sin((lat2 - lat1) * RAD / 2) ** 2 + Math.cos(lat1 * RAD) * Math.cos(lat2 * RAD) * Math.sin((lon2 - lon1) * RAD / 2) ** 2;
+  return 2 * 6371000 * Math.asin(Math.sqrt(a));
+}
+function yon(lat1, lon1, lat2, lon2) {   // derece, kuzeyden saat yönünde
+  const y = Math.sin((lon2 - lon1) * RAD) * Math.cos(lat2 * RAD);
+  const x = Math.cos(lat1 * RAD) * Math.sin(lat2 * RAD) - Math.sin(lat1 * RAD) * Math.cos(lat2 * RAD) * Math.cos((lon2 - lon1) * RAD);
+  return Math.atan2(y, x) / RAD;
+}
+function mesafeYazi(m) { return m < 950 ? Math.round(m / 10) * 10 + " m" : (m / 1000).toFixed(1).replace(".", ",") + " km"; }
+function alanMerkezi(h) {
+  let a = 0, cx = 0, cy = 0;
+  for (let i = 0; i < h.length; i++) { const [x1, y1] = h[i], [x2, y2] = h[(i + 1) % h.length], c = x1 * y2 - x2 * y1; a += c; cx += (x1 + x2) * c; cy += (y1 + y2) * c; }
+  if (Math.abs(a) < 1e-14) return [h.reduce((s, p) => s + p[1], 0) / h.length, h.reduce((s, p) => s + p[0], 0) / h.length];
+  return [cy / (3 * a), cx / (3 * a)];
+}
+async function getir(url, secenek = {}, sureMs = 25000) {
+  const k = new AbortController(), z = setTimeout(() => k.abort(), sureMs);
+  try {
+    const r = await fetch(url, { ...secenek, signal: k.signal });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return await r.json();
+  } finally { clearTimeout(z); }
+}
+
+/* ---------------- TKGM ---------------- */
+const tkgmBellek = new Map();
+async function tkgm(yol) {
+  if (!tkgmBellek.has(yol)) tkgmBellek.set(yol, getir(TKGM + yol).catch(e => { tkgmBellek.delete(yol); throw e; }));
+  return tkgmBellek.get(yol);
+}
+async function tkgmListe(yol) {
+  const d = await tkgm(yol);
+  return d.features.map(f => f.properties).sort((a, b) => a.text.localeCompare(b.text, "tr"));
+}
+async function parselGetir(mahId, ada, parsel) {
+  let v;
+  try { v = await getir(`${TKGM}/parsel/${mahId}/${encodeURIComponent(ada)}/${encodeURIComponent(parsel)}`); }
+  catch (e) { throw new Error(`Bu ada/parsel TKGM'de bulunamadı ya da TKGM yanıt vermedi (${e.message}).`); }
+  const g = v.geometry || {};
+  let h = g.type === "Polygon" ? g.coordinates[0] : g.type === "MultiPolygon" ? g.coordinates.map(p => p[0]).sort((a, b) => b.length - a.length)[0] : null;
+  if (!h) throw new Error("TKGM bu parsel için sınır bilgisi döndürmedi.");
+  h = h.map(p => [+p[0], +p[1]]);
+  if (h[0][0] === h[h.length - 1][0] && h[0][1] === h[h.length - 1][1]) h.pop();
+  const [lat, lon] = alanMerkezi(h), o = v.properties || {};
+  return { lat, lon, halka: h, cap: 2 * Math.max(...h.map(p => mesafeM(lat, lon, p[1], p[0]))),
+    il: o.ilAd, ilce: o.ilceAd, mahalle: o.mahalleAd, ada: o.adaNo || ada, parsel: o.parselNo || parsel,
+    alan: (o.alan || "").split(",")[0], nitelik: o.nitelik || "", mevkii: o.mevkii || "" };
+}
+
+/* ---------------- Şehir merkezi ve yol ---------------- */
+let nomiSira = Promise.resolve();
+function nomi(param) {   // Nominatim kuralı: saniyede en çok 1 istek
+  const is = nomiSira.then(async () => {
+    const u = NOMINATIM + "?" + new URLSearchParams({ format: "jsonv2", "accept-language": "tr", ...param });
+    try { return await getir(u, {}, 15000); } catch (e) { return []; } finally { await bekle(1100); }
+  });
+  nomiSira = is.catch(() => { });
+  return is;
+}
+async function sehirMerkezi(il) {
+  const b = MERKEZ[trSade(il)];
+  if (b) return { ...b, etiket: `${il} · ${b.ad}` };
+  const d = await nomi({ city: il, country: "Türkiye", limit: 1 });
+  if (d[0]) return { ad: il, lat: +d[0].lat, lon: +d[0].lon, etiket: `${il} şehir merkezi` };
+  return null;
+}
+async function yolGetir(a, b) {   // arabayla yol; alınamazsa null (kuş uçuşu kullanılır)
+  try {
+    const d = await getir(`${OSRM}${a.lon},${a.lat};${b.lon},${b.lat}?overview=simplified&geometries=geojson`, {}, 12000);
+    const r = d.routes && d.routes[0];
+    if (d.code !== "Ok" || !r || r.geometry.coordinates.length < 2) return null;
+    return { km: r.distance / 1000, dk: Math.round(r.duration / 60), nokta: r.geometry.coordinates };
+  } catch (e) { return null; }
+}
+
+/* ---------------- Çevredeki yerler ---------------- */
+const KAT = {   // tür: [ad, renk, öncelik]
+  hospital: ["Hastane", "#ff6b6b", 1], school: ["Okul", "#ffd24a", 2], supermarket: ["Market", "#6ee07a", 2],
+  station: ["Metro / tren", "#7ab8ff", 1], university: ["Üniversite", "#ffb84a", 3], mall: ["AVM", "#54d1c2", 3],
+  bus_stop: ["Otobüs durağı", "#9fd0ff", 4], pharmacy: ["Eczane", "#ff9ad5", 4], fuel: ["Akaryakıt", "#cfd6de", 6],
+  place_of_worship: ["Cami", "#d7c4ff", 6], clinic: ["Sağlık merkezi", "#ff9a9a", 5]
+};
+const CAZ = {   // tür: [ad, renk, en çok, en küçük genişlik m]
+  millet: ["Millet bahçesi", "#ffcf3f", 2, 0], proje: ["Konut / site projesi", "#ff9f43", 2, 150],
+  park: ["Park", "#7be083", 1, 250], su: ["Göl / kanal", "#5cc8ff", 1, 150], gezi: ["Gezi noktası", "#d7a6ff", 1, 0]
+};
+const PROJE_ADI = /(konut|evler|site|residen|rezidans|villa|konak|vadi|park|kent|tower|kule|city|life|garden|bahçe|panorama|teras|country|royal|prestij|elit)/i;
+function cazibeTuru(e, ad) {
+  if (/millet bah[çc]esi/i.test(ad)) return "millet";
+  if (e.landuse === "residential") return /(mahallesi|köyü|mah\.)\s*$/i.test(ad) ? null : "proje";
+  if (["park", "nature_reserve", "golf_course", "garden"].includes(e.leisure)) return "park";
+  if (e.natural === "water" || ["canal", "river"].includes(e.waterway)) return "su";
+  if (["attraction", "theme_park", "zoo", "museum", "viewpoint"].includes(e.tourism)) return "gezi";
+  return null;
+}
+async function overpass(sorgu) {
+  for (const s of OVERPASS) {
+    try { return (await getir(s, { method: "POST", body: new URLSearchParams({ data: sorgu }) }, 40000)).elements || []; } catch (e) { }
+  }
+  return null;
+}
+const kutu = (lat, lon, r) => { const dy = r / 111320, dx = r / (111320 * Math.cos(lat * RAD)); return `${lon - dx},${lat + dy},${lon + dx},${lat - dy}`; };
+const elKonum = el => [el.lat ?? (el.center || {}).lat, el.lon ?? (el.center || {}).lon];
+
+async function cevreYerler(lat, lon, enCok, ilerle) {
+  let secilen = [];
+  for (const r of [1500, 4000, 10000]) {
+    ilerle(`Çevre aranıyor (${r / 1000} km)…`);
+    const a = `(around:${r},${lat},${lon})`;
+    let ham = await overpass(`[out:json][timeout:25];(nwr${a}["amenity"~"^(hospital|clinic|pharmacy|school|university|fuel)$"];
+      nwr${a}["amenity"="place_of_worship"]["religion"="muslim"];nwr${a}["shop"~"^(supermarket|mall)$"];
+      node${a}["highway"="bus_stop"];nwr${a}["railway"="station"];);out center tags;`);
+    if (ham) {
+      ham = ham.map(el => { const t = el.tags || {}, [la, lo] = elKonum(el);
+        return { ad: t.name, tur: t.amenity || t.shop || t.highway || (t.railway ? "station" : null), lat: la, lon: lo }; });
+    } else {   // yedek: Nominatim
+      ham = [];
+      for (const [kelime, tur] of [["hospital", "hospital"], ["school", "school"], ["supermarket", "supermarket"], ["pharmacy", "pharmacy"], ["bus stop", "bus_stop"], ["fuel", "fuel"]]) {
+        for (const d of await nomi({ q: kelime, viewbox: kutu(lat, lon, r), bounded: 1, limit: 40 }))
+          if (d.type === tur) ham.push({ ad: d.name, tur, lat: +d.lat, lon: +d.lon });
+      }
+    }
+    const yakin = {};
+    ham.filter(y => y.lat && KAT[y.tur]).map(y => ({ ...y, m: mesafeM(lat, lon, y.lat, y.lon) })).filter(y => y.m <= r)
+      .sort((x, y) => x.m - y.m).forEach(y => { if (!yakin[y.tur]) yakin[y.tur] = y; });
+    secilen = Object.values(yakin);
+    if (secilen.length >= 4) break;
+  }
+  return secilen.sort((x, y) => KAT[x.tur][2] - KAT[y.tur][2] || x.m - y.m).slice(0, enCok).sort((x, y) => x.m - y.m)
+    .map(y => ({ ...y, kategori: KAT[y.tur][0], renk: KAT[y.tur][1], ad: y.ad || KAT[y.tur][0], grup: "cevre" }));
+}
+async function cazibeMerkezleri(lat, lon, r, enCok, ilerle) {
+  ilerle("Cazibe merkezleri aranıyor…");
+  const a = `(around:${r},${lat},${lon})`;
+  let ham = await overpass(`[out:json][timeout:40];(nwr${a}["leisure"~"^(park|nature_reserve|golf_course)$"]["name"];
+    nwr${a}["natural"="water"]["name"];way${a}["waterway"~"^(canal|river)$"]["name"];nwr${a}["landuse"="residential"]["name"];
+    nwr${a}["tourism"~"^(attraction|theme_park|zoo|museum)$"]["name"];);out tags center bb;`);
+  if (ham) {
+    ham = ham.map(el => { const t = el.tags || {}, [la, lo] = elKonum(el), b = el.bounds;
+      return { ad: t.name || "", tur: cazibeTuru(t, t.name || ""), lat: la, lon: lo,
+        en: b ? Math.max((b.maxlat - b.minlat) * 111320, (b.maxlon - b.minlon) * 111320 * Math.cos(lat * RAD)) : null }; });
+  } else {
+    ham = [];
+    for (const kelime of ["millet bahçesi", "park", "gölü", "kanal", "sitesi", "konutları", "evleri"]) {
+      for (const d of await nomi({ q: kelime, viewbox: kutu(lat, lon, r), bounded: 1, limit: 40 })) {
+        if (!d.name) continue;
+        const k = d.boundingbox.map(Number);
+        ham.push({ ad: d.name, tur: cazibeTuru({ [d.category]: d.type }, d.name), lat: +d.lat, lon: +d.lon,
+          en: Math.max((k[1] - k[0]) * 111320, (k[3] - k[2]) * 111320 * Math.cos(lat * RAD)) });
+      }
+    }
+  }
+  const gorulen = new Set(), aday = [];
+  for (const y of ham) {
+    if (!y.tur || !y.lat) continue;
+    y.m = mesafeM(lat, lon, y.lat, y.lon);
+    const anahtar = y.tur + "|" + trSade(y.ad.replace(/\s*\d+\.?\s*(etap|kısım|blok).*$/i, ""));
+    if (y.m > r || gorulen.has(anahtar)) continue;
+    gorulen.add(anahtar); aday.push(y);
+  }
+  let secilen = [];
+  for (const [tur, [kat, renk, adet, enKucuk]] of Object.entries(CAZ)) {
+    const g = aday.filter(y => y.tur === tur && (y.en == null || y.en >= enKucuk));
+    g.sort((x, y) => (tur === "proje" ? (PROJE_ADI.test(x.ad) ? 0 : 1) - (PROJE_ADI.test(y.ad) ? 0 : 1) : 0) || x.m - y.m);
+    secilen.push(...g.slice(0, adet).map(y => ({ ...y, kategori: kat, renk, grup: "cazibe" })));
+  }
+  return secilen.sort((x, y) => x.m - y.m).slice(0, enCok);
+}
+
+/* ==================================================================
+   SAHNE
+   ================================================================== */
+let viewer = null, scene = null, S = null;     // S: o anki videonun tüm verisi
+const cikti = $("cikti"), ctx = cikti.getContext("2d");
+
+function sahneKur(W, H) {
+  const kap = $("harita");
+  kap.style.width = W + "px"; kap.style.height = H + "px";
+  cikti.width = W; cikti.height = H;
+  if (!viewer) {
+    Cesium.Ion.defaultAccessToken = undefined;
+    Cesium.RequestScheduler.maximumRequestsPerServer = 18;
+    viewer = new Cesium.Viewer("harita", {
+      baseLayer: new Cesium.ImageryLayer(new Cesium.UrlTemplateImageryProvider({ url: UYDU, maximumLevel: 18 })),
+      baseLayerPicker: false, geocoder: false, homeButton: false, sceneModePicker: false, fullscreenButton: false,
+      animation: false, timeline: false, navigationHelpButton: false, infoBox: false, selectionIndicator: false,
+      useDefaultRenderLoop: false, contextOptions: { webgl: { preserveDrawingBuffer: true } }
+    });
+    scene = viewer.scene;
+    scene.globe.maximumScreenSpaceError = 1.6;
+    scene.globe.tileCacheSize = 1500;
+    scene.msaaSamples = 1; scene.highDynamicRange = false;
+    scene.skyAtmosphere.show = false; scene.skyBox.show = false; scene.sun.show = false; scene.moon.show = false;
+    scene.globe.showGroundAtmosphere = false; scene.globe.enableLighting = false;
+    scene.backgroundColor = Cesium.Color.fromCssColorString("#9fc4e8");
+  }
+  viewer.entities.removeAll();
+  viewer.resolutionScale = 1; viewer.resize();
+}
+const C3 = (lon, lat, h = 0) => Cesium.Cartesian3.fromDegrees(lon, lat, h);
+
+function yolHazirla(nokta) {   // [[lon,lat],...] → uzunluk tablosu
+  const birikim = [0];
+  for (let i = 1; i < nokta.length; i++) birikim.push(birikim[i - 1] + mesafeM(nokta[i - 1][1], nokta[i - 1][0], nokta[i][1], nokta[i][0]));
+  return { nokta, birikim, toplam: birikim[birikim.length - 1] || 1 };
+}
+function yolKes(yol, f) {      // yolun f (0..1) kadarı: {nokta dizisi, uç}
+  const hedef = yol.toplam * sinirla(f, 0, 1), cik = [yol.nokta[0]];
+  for (let i = 1; i < yol.nokta.length; i++) {
+    if (yol.birikim[i] <= hedef) { cik.push(yol.nokta[i]); continue; }
+    const k = (hedef - yol.birikim[i - 1]) / Math.max(1e-6, yol.birikim[i] - yol.birikim[i - 1]);
+    cik.push([ara(yol.nokta[i - 1][0], yol.nokta[i][0], k), ara(yol.nokta[i - 1][1], yol.nokta[i][1], k)]);
+    break;
+  }
+  return { nokta: cik, uc: cik[cik.length - 1] };
+}
+
+function planla() {
+  const n = S.yerler.length, u = S.uzun, var_ = S.sehir && S.sehirM > 1500;
+  const P = { A: var_ ? (u ? 3.5 : 2.2) : 0, B: var_ ? (u ? 9 : 5) : 0, C: u ? 2.5 : 1.6, D: n * (u ? 1.6 : 1.0),
+              O: n ? (u ? 3.5 : 2.4) : 0, E: u ? 7.5 : 5, F: u ? 4.5 : 3.2 };
+  let t = 0; S.Z = {};
+  for (const k of "ABCDOEF") { S.Z[k] = [t, t + P[k]]; t += P[k]; }
+  S.sure = t; S.adim = u ? 1.6 : 1.0;
+}
+const faz = (k, t) => { const [a, b] = S.Z[k]; return b > a ? sinirla((t - a) / (b - a), 0, 1) : (t >= a ? 1 : 0); };
+
+function sahneDoldur() {
+  const p = S.p, kirmizi = Cesium.Color.fromCssColorString("#ff3b30");
+  viewer.entities.add({ polygon: { hierarchy: Cesium.Cartesian3.fromDegreesArray(p.halka.flat()), height: 0.5, material: kirmizi.withAlpha(0.3) } });
+  viewer.entities.add({ polyline: { positions: Cesium.Cartesian3.fromDegreesArrayHeights(p.halka.concat([p.halka[0]]).flatMap(q => [q[0], q[1], 1.5])),
+    width: S.u * 0.5, material: new Cesium.PolylineOutlineMaterialProperty({ color: kirmizi, outlineColor: Cesium.Color.WHITE, outlineWidth: 2 }) } });
+  // Şehirden arsaya uzayan çizgi
+  if (S.yol) {
+    const altin = Cesium.Color.fromCssColorString("#ffd24a");
+    viewer.entities.add({ polyline: { show: new Cesium.CallbackProperty(() => (S.okGor ?? 1) > 0.02, false),
+      positions: new Cesium.CallbackProperty(() => { const k = yolKes(S.yol, S.yolF || 0).nokta; return k.length > 1 ? k.map(q => C3(q[0], q[1], 6)) : [C3(k[0][0], k[0][1], 6), C3(k[0][0], k[0][1] + 1e-6, 6)]; }, false),
+      width: S.u * 0.75, material: new Cesium.PolylineOutlineMaterialProperty({ color: altin, outlineColor: Cesium.Color.fromCssColorString("#3a2c00"), outlineWidth: 2 }) } });
+  }
+  // Parselden her yere uzayan oklar
+  S.yerler.forEach(y => {
+    const renk = Cesium.Color.fromCssColorString(y.renk);
+    viewer.entities.add({ polyline: { show: new Cesium.CallbackProperty(() => (y.ac || 0) > 0.02 && (S.okGor || 0) > 0.02, false),
+      positions: new Cesium.CallbackProperty(() => { const k = Math.max(0.02, y.ac || 0); return [C3(p.lon, p.lat, 4), C3(ara(p.lon, y.lon, k), ara(p.lat, y.lat, k), 4)]; }, false),
+      width: S.u * (y.grup === "cazibe" ? 0.95 : 0.75), material: new Cesium.PolylineArrowMaterialProperty(renk.withAlpha(0.95)) } });
+  });
+}
+
+function kamera(t) {
+  const p = S.p, Z = S.Z;
+  const pA = yumusak(faz("A", t)), pB = yumusak(faz("B", t)), pE = yumusak(faz("E", t) * 1.35);
+  let hedef = [p.lon, p.lat];
+  S.yolF = S.yol ? (t < Z.B[0] ? 0 : pB) : 0;
+  if (S.yol && t < Z.B[1]) hedef = yolKes(S.yol, S.yolF).uc;
+  const logu = (a, b, k) => Math.exp(ara(Math.log(a), Math.log(b), k));
+  let menzil, egim;
+  if (S.yol && t < Z.A[1]) { menzil = logu(S.rBas, S.rYol, pA); egim = ara(-88, -50, pA); }
+  else if (S.yol && t < Z.B[1]) { menzil = logu(S.rYol, S.genis, yumusak((faz("B", t) - 0.62) / 0.38)); egim = ara(-50, -46, pB); }
+  else { menzil = logu(S.genis, S.yakin, pE); egim = ara(-46, -34, pE); }
+  const tCD = sinirla(t - Z.C[0], 0, Z.O[1] - Z.C[0]), tEF = sinirla(t - Z.E[0], 0, Z.F[1] - Z.E[0]);
+  const aci = S.yon + 70 * tCD / Math.max(0.001, Z.O[1] - Z.C[0]) + 170 * tEF / Math.max(0.001, Z.F[1] - Z.E[0]);
+  viewer.camera.lookAt(C3(hedef[0], hedef[1], 0), new Cesium.HeadingPitchRange(aci * RAD, egim * RAD, menzil));
+  S.menzil = menzil;
+  // yerlerin açılma durumu
+  S.yerler.forEach((y, i) => { y.ac = yumusak((t - (Z.D[0] + i * S.adim)) / 0.55); });
+  S.okGor = 1 - yumusak(faz("E", t) / 0.2);
+  S.simdiki = t >= Z.D[0] && t < Z.D[1] ? Math.min(S.yerler.length - 1, Math.floor((t - Z.D[0]) / S.adim)) : -1;
+}
+
+/* ---------------- Tuval üstü yazılar (HUD) ---------------- */
+const yaz = (boyut, kalin = 700) => { ctx.font = `${kalin} ${Math.round(boyut)}px ${YAZITIPI}`; };
+function kutuCiz(x, y, w, h, r, renk) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); ctx.fillStyle = renk; ctx.fill(); }
+function sigdir(metin, enCok) {
+  if (ctx.measureText(metin).width <= enCok) return metin;
+  let s = metin;
+  while (s.length > 2 && ctx.measureText(s + "…").width > enCok) s = s.slice(0, -1);
+  return s.trimEnd() + "…";
+}
+function ekran(lon, lat) {
+  const c = scene.cartesianToCanvasCoordinates(C3(lon, lat, 0));
+  return c && isFinite(c.x) ? c : null;
+}
+function igne(x, y, renk, r) {
+  ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fillStyle = "#fff"; ctx.fill();
+  ctx.beginPath(); ctx.arc(x, y, r * 0.7, 0, 7); ctx.fillStyle = renk; ctx.fill();
+}
+function etiket(x, y, ust, alt, renk, buyuk, sinir) {   // noktanın üstünde iki satırlı kutu
+  const u = S.u; let b1 = buyuk ? 4.3 * u : 3 * u; const b2 = buyuk ? 3.5 * u : 2.6 * u, pad = buyuk ? 1.9 * u : 1.3 * u;
+  const enCok = Math.min(S.W - 6 * u, buyuk ? 78 * u : 52 * u) - 2 * pad;
+  yaz(b1, 800); if (buyuk && ctx.measureText(ust).width > enCok) yaz(b1 = Math.max(b1 * 0.74, b1 * enCok / ctx.measureText(ust).width), 800);
+  const s1 = sigdir(ust, enCok), w1 = ctx.measureText(s1).width;
+  yaz(b2, 700); const s2 = alt ? sigdir(alt, enCok) : "", w2 = alt ? ctx.measureText(s2).width : 0;
+  const w = Math.max(w1, w2) + 2 * pad, h = b1 * 1.2 + (alt ? b2 * 1.35 : 0) + pad * 1.5;
+  let kx = sinirla(x - w / 2, 3 * u, S.W - 3 * u - w), ky = y - h - 3.2 * u;
+  ky = sinirla(ky, sinir[0], sinir[1] - h);
+  ctx.strokeStyle = renk; ctx.lineWidth = Math.max(2, u * 0.35);
+  ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(sinirla(x, kx + pad, kx + w - pad), ky + h / 2); ctx.stroke();
+  kutuCiz(kx, ky, w, h, 1.4 * u, "rgba(12,16,22,.92)");
+  kutuCiz(kx, ky, 0.9 * u, h, 0.45 * u, renk);
+  ctx.textBaseline = "top"; ctx.textAlign = "left";
+  yaz(b1, 800); ctx.fillStyle = "#fff"; ctx.fillText(s1, kx + pad, ky + pad * 0.7);
+  if (alt) { yaz(b2, 700); ctx.fillStyle = "#ffd24a"; ctx.fillText(s2, kx + pad, ky + pad * 0.7 + b1 * 1.2); }
+  return [kx, ky, w, h];
+}
+
+function hud(t) {
+  const W = S.W, H = S.H, u = S.u, p = S.p, Z = S.Z, dikey = H > W, k = S.kart;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 1;
+  ctx.drawImage(viewer.canvas, 0, 0, W, H);
+  ctx.textBaseline = "top"; ctx.textAlign = "left";
+  const kenar = 3.5 * u;
+
+  // --- üst: kartvizit + parsel başlığı ---
+  const kartW = dikey ? W - 2 * kenar : 56 * u, kartH = 14.5 * u, kartX = dikey ? kenar : W - kenar - kartW, kartY = kenar;
+  const basW = dikey ? W - 2 * kenar : Math.min(W - kartW - 3 * kenar, 80 * u), basH = 18.5 * u, basX = kenar, basY = dikey ? kartY + kartH + 1.6 * u : kenar;
+  const ustAlt = (dikey ? basY + basH : Math.max(kartH, basH) + kenar) + 2 * u;
+  if (k.firma || k.isim || k.tel) {
+    kutuCiz(kartX, kartY, kartW, kartH, 1.8 * u, "rgba(255,255,255,.96)");
+    kutuCiz(kartX, kartY, 1.1 * u, kartH, 0.55 * u, "#c8a24a");
+    yaz(4.7 * u, 800); ctx.fillStyle = "#10161d"; ctx.fillText(sigdir(k.firma, kartW - 5 * u), kartX + 3.2 * u, kartY + 2.2 * u);
+    yaz(4.6 * u, 800); const telW = ctx.measureText(k.tel).width;
+    ctx.fillStyle = "#9a6f12"; ctx.fillText(k.tel, kartX + kartW - telW - 2.6 * u, kartY + 8.2 * u);
+    yaz(3.4 * u, 600); ctx.fillStyle = "#3c4653"; ctx.fillText(sigdir(k.isim, kartW - telW - 8 * u), kartX + 3.2 * u, kartY + 8.9 * u);
+  }
+  kutuCiz(basX, basY, basW, basH, 1.8 * u, "rgba(12,16,22,.86)");
+  kutuCiz(basX, basY, 1.1 * u, basH, 0.55 * u, "#ff3b30");
+  yaz(5 * u, 800); ctx.fillStyle = "#fff"; ctx.fillText(sigdir(`${p.mahalle} · ${p.ada} ada ${p.parsel} parsel`, basW - 5.5 * u), basX + 3.2 * u, basY + 2 * u);
+  yaz(3.4 * u, 600); ctx.fillStyle = "#d5dbe3"; ctx.fillText(sigdir(`${p.ilce} / ${p.il}` + (p.mevkii ? ` · ${p.mevkii} mevkii` : ""), basW - 5.5 * u), basX + 3.2 * u, basY + 8.2 * u);
+  yaz(3.9 * u, 800); ctx.fillStyle = "#ffd24a"; ctx.fillText(sigdir([p.alan ? p.alan + " m²" : "", p.nitelik].filter(Boolean).join(" · "), basW - 5.5 * u), basX + 3.2 * u, basY + 12.7 * u);
+
+  const altSinir = H - 6 * u, sinir = [ustAlt, altSinir];
+  const eSon = yumusak(faz("F", t) / 0.35);
+
+  // --- haritadaki işaretler (üst kartların ve alt şeridin üstüne taşmaz) ---
+  ctx.save(); ctx.beginPath(); ctx.rect(0, ustAlt - u, W, altSinir + 2 * u - ustAlt); ctx.clip();
+  if (S.sehir && t < Z.C[1]) {
+    const c = ekran(S.sehir.lon, S.sehir.lat), a = 1 - yumusak((t - Z.B[1]) / 1.2);
+    if (c && a > 0.02 && c.y > -200 && c.y < H + 200) { ctx.globalAlpha = a; igne(c.x, c.y, "#ffd24a", 1.6 * u); etiket(c.x, c.y, S.sehir.etiket, "Şehir merkezi", "#ffd24a", t < Z.A[1] + 1, sinir); ctx.globalAlpha = 1; }
+  }
+  const pc = ekran(p.lon, p.lat);
+  if (pc && S.menzil > S.yakin * 2.4) {
+    const nabiz = 1 + 0.25 * Math.sin(t * 5);
+    ctx.globalAlpha = 0.35; ctx.beginPath(); ctx.arc(pc.x, pc.y, 3.2 * u * nabiz, 0, 7); ctx.fillStyle = "#ff3b30"; ctx.fill(); ctx.globalAlpha = 1;
+    igne(pc.x, pc.y, "#ff3b30", 1.7 * u);
+    if (S.simdiki < 0 && t >= Z.B[0] + 0.6 && t < Z.O[0]) etiket(pc.x, pc.y, `${p.ada} / ${p.parsel}`, "", "#ff3b30", false, sinir);
+  }
+  // yerler: açılanlar numaralı rozet, o an açılan büyük etiket
+  const ozetA = Math.min(yumusak(faz("O", t) / 0.2), 1 - yumusak((faz("O", t) - 0.85) / 0.15));
+  if (S.okGor > 0.02) {
+    ctx.globalAlpha = S.okGor;
+    S.yerler.forEach((y, i) => {
+      if (y.ac < 0.5 || i === S.simdiki) return;
+      const c = ekran(y.lon, y.lat); if (!c) return;
+      const r = 2.3 * u; ctx.beginPath(); ctx.arc(c.x, c.y, r, 0, 7); ctx.fillStyle = "#0c1016"; ctx.fill();
+      ctx.beginPath(); ctx.arc(c.x, c.y, r * 0.84, 0, 7); ctx.fillStyle = y.renk; ctx.fill();
+      yaz(2.7 * u, 800); ctx.fillStyle = "#0c1016"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(String(y.no), c.x, c.y + 0.1 * u);
+      ctx.textAlign = "left"; ctx.textBaseline = "top";
+    });
+    if (S.simdiki >= 0) {
+      const y = S.yerler[S.simdiki], c = ekran(y.lon, y.lat);
+      if (c && y.ac > 0.3) { ctx.globalAlpha = yumusak((y.ac - 0.3) / 0.5); igne(c.x, c.y, y.renk, 1.9 * u);
+        etiket(c.x, c.y, y.ad, (y.ad !== y.kategori ? y.kategori + " · " : "") + y.mesafe, y.renk, true, sinir); }
+    }
+    ctx.globalAlpha = 1;
+  }
+  ctx.restore();
+
+  // --- yolculuk sayacı (A-B): arsaya kalan mesafe ---
+  if (S.yol && t < Z.C[0] + 1.2) {
+    const a = Math.min(yumusak(t / 0.6), 1 - yumusak((t - Z.C[0]) / 1.2));
+    const kat = (S.yolBilgi ? S.yolBilgi.km * 1000 : S.sehirM) * (1 - S.yolF);
+    const w = dikey ? W - 2 * kenar : 74 * u, h = 22 * u, x = (W - w) / 2, y0 = altSinir - h - 2 * u;
+    ctx.globalAlpha = a;
+    kutuCiz(x, y0, w, h, 2 * u, "rgba(12,16,22,.88)");
+    ctx.textAlign = "center";
+    yaz(3.4 * u, 700); ctx.fillStyle = "#d5dbe3"; ctx.fillText(sigdir(`${S.sehir.etiket.toLocaleUpperCase("tr")} → ARSAYA KALAN`, w - 4 * u), W / 2, y0 + 2.2 * u);
+    yaz(9 * u, 800); ctx.fillStyle = "#ffd24a"; ctx.fillText(mesafeYazi(kat), W / 2, y0 + 6.6 * u);
+    yaz(3.3 * u, 600); ctx.fillStyle = "#fff";
+    ctx.fillText(S.yolBilgi ? `Arabayla yaklaşık ${S.yolBilgi.dk} dk · ${S.yolBilgi.km.toFixed(1).replace(".", ",")} km` : `Kuş uçuşu toplam ${mesafeYazi(S.sehirM)}`, W / 2, y0 + 17 * u);
+    ctx.textAlign = "left"; ctx.globalAlpha = 1;
+  }
+
+  // --- özet listesi (O) ---
+  if (ozetA > 0.02 && S.yerler.length) {
+    const sat = 5.6 * u, bas = 5 * u, gruplar = [["cevre", "YAKIN ÇEVRE"], ["cazibe", "CAZİBE MERKEZLERİ"]].filter(g => S.yerler.some(y => y.grup === g[0]));
+    const w = dikey ? W - 2 * kenar : 84 * u, h = S.yerler.length * sat + gruplar.length * bas + 6.5 * u;
+    const x = (W - w) / 2, y0 = sinirla(ustAlt + (altSinir - ustAlt - h) / 2, ustAlt, Math.max(ustAlt, altSinir - h));
+    ctx.globalAlpha = ozetA * 0.45; ctx.fillStyle = "#06090d"; ctx.fillRect(0, ustAlt - 2 * u, W, H); ctx.globalAlpha = ozetA;
+    kutuCiz(x, y0, w, h, 2 * u, "rgba(12,16,22,.93)");
+    let yy = y0 + 2.2 * u;
+    for (const [grup, baslik] of gruplar) {
+      yaz(2.9 * u, 800); ctx.fillStyle = "#ffcf3f"; ctx.fillText(baslik, x + 3 * u, yy + 0.8 * u); yy += bas;
+      for (const y of S.yerler.filter(v => v.grup === grup)) {
+        ctx.beginPath(); ctx.arc(x + 5 * u, yy + sat / 2 - 0.4 * u, 2.1 * u, 0, 7); ctx.fillStyle = y.renk; ctx.fill();
+        yaz(2.6 * u, 800); ctx.fillStyle = "#0c1016"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(String(y.no), x + 5 * u, yy + sat / 2 - 0.3 * u);
+        ctx.textBaseline = "top"; ctx.textAlign = "right"; yaz(3.5 * u, 800); ctx.fillStyle = "#ffd24a"; ctx.fillText(y.mesafe, x + w - 3 * u, yy + 0.7 * u);
+        const mw = ctx.measureText(y.mesafe).width; ctx.textAlign = "left"; yaz(3.5 * u, 600); ctx.fillStyle = "#fff";
+        ctx.fillText(sigdir(y.ad, w - 13 * u - mw), x + 8.6 * u, yy + 0.7 * u); yy += sat;
+      }
+    }
+    yaz(2.3 * u, 500); ctx.fillStyle = "#9aa6b5"; ctx.fillText("Mesafeler kuş uçuşudur.", x + 3 * u, yy + 0.6 * u);
+    ctx.globalAlpha = 1;
+  }
+
+  // --- parsel bilgisi (E) ---
+  if (t >= Z.E[0] + 0.8 && eSon < 0.98) {
+    const a = yumusak((t - Z.E[0] - 0.8) / 0.8) * (1 - eSon), w = dikey ? W - 2 * kenar : 70 * u, h = 25 * u, x = (W - w) / 2, y0 = altSinir - h - 2 * u;
+    ctx.globalAlpha = a; kutuCiz(x, y0, w, h, 2 * u, "rgba(12,16,22,.88)"); ctx.textAlign = "center";
+    yaz(10 * u, 800); ctx.fillStyle = "#ffd24a"; ctx.fillText(p.alan ? p.alan + " m²" : `${p.ada} / ${p.parsel}`, W / 2, y0 + 2 * u);
+    yaz(4 * u, 700); ctx.fillStyle = "#fff"; ctx.fillText(sigdir([p.nitelik, `${p.ada} ada ${p.parsel} parsel`].filter(Boolean).join(" · "), w - 4 * u), W / 2, y0 + 13.4 * u);
+    if (S.sehir) { yaz(3.4 * u, 600); ctx.fillStyle = "#d5dbe3";
+      ctx.fillText(sigdir(`${S.sehir.etiket}: ` + (S.yolBilgi ? `arabayla ${S.yolBilgi.dk} dk` : mesafeYazi(S.sehirM) + " (kuş uçuşu)"), w - 4 * u), W / 2, y0 + 19.2 * u); }
+    ctx.textAlign = "left"; ctx.globalAlpha = 1;
+  }
+
+  // --- kapanış kartı (F) ---
+  if (eSon > 0.01) {
+    ctx.globalAlpha = eSon * 0.8; ctx.fillStyle = "#06090d"; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = eSon;
+    const w = Math.min(W - 2 * kenar, 92 * u), h = 52 * u, x = (W - w) / 2, y0 = (H - h) / 2;
+    kutuCiz(x, y0, w, h, 2.6 * u, "#ffffff"); kutuCiz(x, y0, w, 1.6 * u, 0.8 * u, "#c8a24a");
+    ctx.textAlign = "center";
+    yaz(7.4 * u, 800); ctx.fillStyle = "#10161d"; ctx.fillText(sigdir(k.firma || "", w - 6 * u), W / 2, y0 + 6 * u);
+    yaz(4.4 * u, 600); ctx.fillStyle = "#3c4653"; ctx.fillText(sigdir(k.isim || "", w - 6 * u), W / 2, y0 + 16.5 * u);
+    yaz(9.4 * u, 800); ctx.fillStyle = "#9a6f12"; ctx.fillText(sigdir(k.tel || "", w - 6 * u), W / 2, y0 + 24.5 * u);
+    ctx.fillStyle = "#c8a24a"; ctx.fillRect(W / 2 - 14 * u, y0 + 37.5 * u, 28 * u, 0.4 * u);
+    yaz(3.5 * u, 700); ctx.fillStyle = "#10161d";
+    ctx.fillText(sigdir(`${p.mahalle} ${p.ada}/${p.parsel}` + (p.alan ? ` · ${p.alan} m²` : ""), w - 6 * u), W / 2, y0 + 40.5 * u);
+    yaz(3.1 * u, 500); ctx.fillStyle = "#5a6573"; ctx.fillText("Bilgi ve yer gösterme için arayın", W / 2, y0 + 46 * u);
+    ctx.textAlign = "left"; ctx.globalAlpha = 1;
+  }
+
+  // --- kaynak satırı ---
+  yaz(1.9 * u, 500); ctx.textAlign = "center"; ctx.fillStyle = "rgba(0,0,0,.55)"; ctx.fillRect(0, H - 3.6 * u, W, 3.6 * u);
+  ctx.fillStyle = "#e6eaf0"; ctx.fillText("Uydu: Esri, Maxar, Earthstar Geographics · Parsel: TKGM · Yerler ve yol: © OpenStreetMap", W / 2, H - 2.9 * u);
+  ctx.textAlign = "left";
+}
+
+/* ---------------- Kare çizimi ---------------- */
+async function kare(t, enCokMs = 8000) {   // karolar gelene kadar bekleyip tek kare çizer
+  t = sinirla(t, 0, S.sure - 0.001);
+  kamera(t);
+  viewer.resolutionScale = 0.2; viewer.resize();
+  const bas = performance.now(); let tamam = false;
+  while (performance.now() - bas < enCokMs) { viewer.render(); if (scene.globe.tilesLoaded) { tamam = true; break; } await bekle(12); }
+  viewer.resolutionScale = 1; viewer.resize(); viewer.render();
+  for (let i = 0; i < 4 && !scene.globe.tilesLoaded; i++) { await bekle(50); viewer.render(); }
+  hud(t);
+  return tamam;
+}
+function kareHizli(t) { t = sinirla(t, 0, S.sure - 0.001); kamera(t); viewer.render(); hud(t); }
+
+/* ---------------- Hazırlık ---------------- */
+async function hazirla(a, ilerle = () => { }) {
+  ilerle("Parsel TKGM'den alınıyor…", 0.03);
+  const p = await parselGetir(a.mahId, a.ada, a.parsel);
+  p.il = p.il || a.il; p.ilce = p.ilce || a.ilce; p.mahalle = p.mahalle || a.mahalle;
+  const dikey = a.bicim !== "yatay", kisa = a.kalite === 1080 ? 1080 : 720;
+  const W = dikey ? kisa : Math.round(kisa * 16 / 9), H = dikey ? Math.round(kisa * 16 / 9) : kisa;
+  S = { p, W, H, u: Math.min(W, H) / 100, uzun: a.uzunluk !== "kisa", kart: a.kart || KART, yerler: [] };
+  ilerle("Şehir merkezi ve yol bulunuyor…", 0.08);
+  S.sehir = await sehirMerkezi(p.il);
+  if (S.sehir) {
+    S.sehirM = mesafeM(S.sehir.lat, S.sehir.lon, p.lat, p.lon);
+    S.yolBilgi = S.sehirM > 1500 ? await yolGetir(S.sehir, p) : null;
+    const nokta = S.yolBilgi ? S.yolBilgi.nokta.concat([[p.lon, p.lat]]) : [[S.sehir.lon, S.sehir.lat], [p.lon, p.lat]];
+    if (S.sehirM > 1500) S.yol = yolHazirla(nokta);
+    S.yon = yon(S.sehir.lat, S.sehir.lon, p.lat, p.lon);
+  } else S.yon = -25;
+  const cevre = await cevreYerler(p.lat, p.lon, 5, m => ilerle(m, 0.15));
+  const cazibe = await cazibeMerkezleri(p.lat, p.lon, 10000, 5, m => ilerle(m, 0.3));
+  S.yerler = cevre.concat(cazibe).map((y, i) => ({ ...y, no: i + 1, mesafe: mesafeYazi(y.m) }));
+  const enUzak = Math.max(900, ...S.yerler.map(y => y.m));
+  S.genis = sinirla(Math.max(enUzak * (dikey ? 3.0 : 2.3), p.cap * 4), 1200, 32000);
+  S.yakin = Math.min(Math.max(p.cap * (dikey ? 2.6 : 1.8), 300), S.genis);
+  S.rYol = sinirla((S.sehirM || 0) * 0.5, 3500, 14000);
+  S.rBas = Math.max(S.rYol * 2.6, 22000);
+  planla();
+  sahneKur(W, H); sahneDoldur();
+  return S;
+}
+async function onYukle(ilerle) {   // oynatmadan önce yol boyunca uydu görüntülerini indirir
+  const adim = 0.45, n = Math.ceil(S.sure / adim);
+  for (let i = 0; i <= n; i++) { await kare(i * adim, 7000); ilerle(`Uydu görüntüleri yükleniyor… %${Math.round(100 * i / n)}`, 0.4 + 0.6 * i / n); }
+  await kare(0);
+}
+
+/* ---------------- Oynatma ve kayıt ---------------- */
+let raf = 0, kayitci = null, sonVideo = null;
+function oynat(bitince) {
+  cancelAnimationFrame(raf);
+  const t0 = performance.now();
+  const dongu = () => {
+    const t = (performance.now() - t0) / 1000;
+    if (t >= S.sure) { kareHizli(S.sure); bitince && bitince(); return; }
+    kareHizli(t); raf = requestAnimationFrame(dongu);
+  };
+  dongu();
+}
+function kayitTuru() {
+  if (!window.MediaRecorder || !cikti.captureStream) return null;
+  return ["video/mp4;codecs=avc1.640028", "video/mp4;codecs=avc1.42E01E", "video/mp4", "video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"]
+    .find(t => MediaRecorder.isTypeSupported(t)) || null;
+}
+function kaydet() {
+  const tur = kayitTuru();
+  if (!tur) { $("bilgi").textContent = "Bu tarayıcı video kaydını desteklemiyor. Telefonun ekran kaydını açıp “Oynat”a basın."; return; }
+  const parcalar = [];
+  kayitci = new MediaRecorder(cikti.captureStream(30), { mimeType: tur, videoBitsPerSecond: S.W * S.H > 1e6 ? 10e6 : 6e6 });
+  kayitci.ondataavailable = e => e.data.size && parcalar.push(e.data);
+  kayitci.onstop = () => {
+    const uzanti = tur.includes("mp4") ? "mp4" : "webm";
+    const ad = `${S.p.mahalle}_${S.p.ada}_${S.p.parsel}.${uzanti}`.replace(/[^\w.\-]/g, "_");
+    sonVideo = new File(parcalar, ad, { type: tur.split(";")[0] });
+    $("bIndir").hidden = false;
+    $("bPaylas").hidden = !(navigator.canShare && navigator.canShare({ files: [sonVideo] }));
+    $("bilgi").textContent = `Video hazır (${(sonVideo.size / 1e6).toFixed(1)} MB, ${uzanti}).` + (uzanti === "webm" ? " WhatsApp webm kabul etmeyebilir; gerekirse ekran kaydı kullanın." : "");
+    dugmeKilit(false);
+  };
+  dugmeKilit(true); $("bilgi").textContent = "Kaydediliyor… Ekranı kapatmayın.";
+  kayitci.start(1000);
+  oynat(() => setTimeout(() => kayitci.state !== "inactive" && kayitci.stop(), 350));
+}
+function dugmeKilit(k) { for (const b of ["bOynat", "bKaydet", "bYeni"]) $(b).disabled = k; }
+
+/* ---------------- Form ---------------- */
+const sakla = { oku(k, v) { try { return localStorage.getItem("pv." + k) ?? v; } catch (e) { return v; } }, yaz(k, v) { try { localStorage.setItem("pv." + k, v); } catch (e) { } } };
+function durum(metin, oran, hata) {
+  $("durum").textContent = metin; $("durum").className = hata ? "hata" : "";
+  $("cubuk").hidden = oran == null; if (oran != null) $("cubuk").firstElementChild.style.width = Math.round(oran * 100) + "%";
+}
+function secenekDoldur(sel, liste, secili) {
+  sel.innerHTML = ""; for (const o of liste) { const e = document.createElement("option"); e.value = o.id; e.textContent = o.text; sel.appendChild(e); }
+  const bul = liste.find(o => String(o.id) === String(secili) || trSade(o.text) === trSade(secili));
+  if (bul) sel.value = bul.id;
+}
+let mahTum = [];
+async function ilceYukle(secili) { secenekDoldur($("ilce"), await tkgmListe("/idariYapi/ilceListe/" + $("il").value), secili); await mahYukle(); }
+async function mahYukle(secili) { mahTum = await tkgmListe("/idariYapi/mahalleListe/" + $("ilce").value); $("mahAra").value = ""; secenekDoldur($("mah"), mahTum, secili); }
+const kartOku = () => ({ firma: $("kFirma").value.trim(), isim: $("kIsim").value.trim(), tel: $("kTel").value.trim() });
+
+async function formBasla() {
+  const q = new URLSearchParams(location.search);
+  $("kFirma").value = sakla.oku("firma", KART.firma); $("kIsim").value = sakla.oku("isim", KART.isim); $("kTel").value = sakla.oku("tel", KART.tel);
+  $("formMarka").textContent = $("kFirma").value;
+  $("bicim").value = q.get("bicim") || sakla.oku("bicim", "dikey"); $("uzunluk").value = q.get("sure") || sakla.oku("uzunluk", "uzun"); $("kalite").value = sakla.oku("kalite", "720");
+  $("ada").value = q.get("ada") || ""; $("parsel").value = q.get("parsel") || "";
+  try {
+    durum("İller yükleniyor…");
+    secenekDoldur($("il"), await tkgmListe("/idariYapi/ilListe"), q.get("il") || sakla.oku("il", "Ankara"));
+    await ilceYukle(q.get("ilce") || sakla.oku("ilce", ""));
+    const m = q.get("mahalle") || sakla.oku("mah", ""); if (m) secenekDoldur($("mah"), mahTum, m);
+    durum("");
+  } catch (e) { durum("TKGM listeleri alınamadı. İnternet bağlantınızı kontrol edip sayfayı yenileyin. (" + e.message + ")", null, true); }
+  $("il").onchange = () => ilceYukle().catch(e => durum("İlçeler alınamadı: " + e.message, null, true));
+  $("ilce").onchange = () => mahYukle().catch(e => durum("Mahalleler alınamadı: " + e.message, null, true));
+  $("mahAra").oninput = () => { const s = trSade($("mahAra").value); secenekDoldur($("mah"), mahTum.filter(o => trSade(o.text).includes(s))); };
+  $("basla").onclick = calistir;
+  $("bOynat").onclick = () => { dugmeKilit(true); oynat(() => dugmeKilit(false)); };
+  $("bKaydet").onclick = kaydet;
+  $("bYeni").onclick = () => { cancelAnimationFrame(raf); $("sahne").hidden = true; $("form").hidden = false; durum(""); };
+  $("bIndir").onclick = () => { const a = document.createElement("a"); a.href = URL.createObjectURL(sonVideo); a.download = sonVideo.name; document.body.appendChild(a); a.click(); a.remove(); };
+  $("bPaylas").onclick = () => navigator.share({ files: [sonVideo], title: sonVideo.name }).catch(() => { });
+  if (q.get("oto") && $("parsel").value) calistir();
+}
+async function calistir() {
+  const sec = id => $(id).options[$(id).selectedIndex];
+  if (!$("mah").value || !$("parsel").value.trim()) { durum("Mahalle/köy ve parsel numarası gerekli.", null, true); return; }
+  const a = { il: sec("il").textContent, ilce: sec("ilce").textContent, mahalle: sec("mah").textContent, mahId: $("mah").value,
+    ada: $("ada").value.trim() || "0", parsel: $("parsel").value.trim(), bicim: $("bicim").value, uzunluk: $("uzunluk").value, kalite: +$("kalite").value, kart: kartOku() };
+  for (const [k, v] of [["il", a.il], ["ilce", a.ilce], ["mah", a.mahalle], ["bicim", a.bicim], ["uzunluk", a.uzunluk], ["kalite", a.kalite], ["firma", a.kart.firma], ["isim", a.kart.isim], ["tel", a.kart.tel]]) sakla.yaz(k, v);
+  $("basla").disabled = true; sonVideo = null; $("bIndir").hidden = true; $("bPaylas").hidden = true;
+  try {
+    await hazirla(a, durum);
+    await onYukle(durum);
+    $("form").hidden = true; $("sahne").hidden = false;
+    $("bilgi").textContent = `${Math.round(S.sure)} saniyelik video hazır. “Kaydet” videoyu dosyaya çevirir.`;
+    try { navigator.wakeLock && navigator.wakeLock.request("screen").catch(() => { }); } catch (e) { }
+    durum("");
+  } catch (e) { durum(e.message || String(e), null, true); }
+  $("basla").disabled = false;
+}
+
+/* ---------------- Bilgisayardan toplu üretim için kanca ---------------- */
+window.PV = {
+  async hazirlaAd(a) {   // il/ilçe/mahalle adlarıyla
+    const bul = (liste, ad, tur) => { const b = liste.filter(o => trSade(o.text) === trSade(ad)); if (b.length !== 1) throw new Error(`'${ad}' adında ${tur} ${b.length ? "birden fazla" : "bulunamadı"}.`); return b[0]; };
+    const il = bul(await tkgmListe("/idariYapi/ilListe"), a.il, "il");
+    const ilce = bul(await tkgmListe("/idariYapi/ilceListe/" + il.id), a.ilce, "ilçe");
+    const mah = bul(await tkgmListe("/idariYapi/mahalleListe/" + ilce.id), a.mahalle, "mahalle/köy");
+    await hazirla({ ...a, il: il.text, ilce: ilce.text, mahalle: mah.text, mahId: mah.id }, a.ilerle || (m => console.log(m)));
+    return { sure: S.sure, W: S.W, H: S.H, yerler: S.yerler.map(y => [y.no, y.kategori, y.ad, y.mesafe]), yol: S.yolBilgi ? [S.yolBilgi.km, S.yolBilgi.dk] : null, sehirKm: (S.sehirM || 0) / 1000 };
+  },
+  kare, jpeg: q => cikti.toDataURL("image/jpeg", q || 0.92)
+};
+if (!new URLSearchParams(location.search).get("toplu")) formBasla();
+</script>
+</body>
+</html>
