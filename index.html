@@ -61,15 +61,15 @@
 
   <label for="talimat">Talimat paneli</label>
   <textarea id="talimat" rows="10" autocomplete="off" placeholder="Örnek: Ankara Çankaya Kocatepe mahallesi 123 ada 4 parsel. Simpaş'tan başla. Önemli yerler: Sinpaş, Park Oran, Panora. Cazibe: Ankara Kalesi, Atakule. Yollar: Çevre Yolu. Vurgu: Yatırım fırsatı. Seslendirme: Bu bölge hızla gelişiyor."></textarea>
-  <div class="ipucu">İl, ilçe, mahalle ya da köy, ada ve parseli yazın; uygulama bulur. “Simpaş'tan başla” yazarsanız video o yerden başlar. İsterseniz bölümleri başlıkla ayırın: <b>Önemli yerler:</b> <b>Cazibe:</b> <b>Yollar:</b> <b>İmar:</b> <b>Doğa:</b> <b>Seslendirme:</b> (ek anlatım, seslendirilir) <b>Vurgu:</b> (ekranda büyük yazı, seslendirilmez). Başlık yazmazsanız yazdığınız yerler önemli yer olarak aranır.</div>
+  <div class="ipucu">İl, ilçe ve mahalle/köyü kutulardan seçebilir ya da talimata yazabilirsiniz; ada ve parseli talimata “123 ada 4 parsel” diye yazın. “Simpaş'tan başla” yazarsanız video o yerden başlar. Başlıklar isteğe bağlı: <b>Önemli yerler:</b> / <b>Çevre bilgisi:</b> · <b>Cazibe:</b> / <b>AVM:</b> / <b>Alışveriş merkezleri:</b> · <b>Yollar:</b> / <b>Otoyol:</b> · <b>İmar:</b> · <b>Doğa:</b> · <b>Seslendirme:</b> (ek anlatım, okunur) · <b>Vurgu:</b> (ekranda, okunmaz). Başlık yazmazsanız yazdığınız yerler önemli yer sayılır.</div>
+  <label for="il">İl</label><select id="il"><option>Yükleniyor…</option></select>
+  <label for="ilce">İlçe</label><select id="ilce"></select>
+  <label for="mah">Mahalle / köy</label><select id="mah"></select>
   <button type="button" id="haritaAc" class="ikincil">Haritadan başlangıç seç</button>
   <label for="satilik">Satılık hisse (m²)</label>
   <input id="satilik" inputmode="numeric" autocomplete="off" placeholder="Örn. 300">
   <details id="konumDetay">
-    <summary>Elle konum (yalnızca bulunamazsa)</summary>
-    <label for="il">İl</label><select id="il"><option>Yükleniyor…</option></select>
-    <label for="ilce">İlçe</label><select id="ilce"></select>
-    <label for="mah">Mahalle / köy</label><select id="mah"></select>
+    <summary>Ada ve parsel (talimatta yazılmadıysa)</summary>
     <div class="iki">
       <div><label for="ada">Ada</label><input id="ada" inputmode="numeric" autocomplete="off" placeholder="0"></div>
       <div><label for="parsel">Parsel</label><input id="parsel" inputmode="numeric" autocomplete="off"></div>
@@ -952,9 +952,9 @@ const kartOku = () => ({ firma: $("kFirma").value.trim(), isim: $("kIsim").value
 const TALIMAT_BOLUM = [   // başlık (küçük harf) → bölüm adı
   ["baslangic", /^(başlangıç noktası|başlangıç|baslangic)(?=[\s:\-–]|$)/],
   ["konum", /^(konum|adres)(?=[\s:\-–]|$)/],
-  ["elle", /^(önemli yerler|önemli yer|önemli|onemli yerler|onemli yer|onemli)(?=[\s:\-–]|$)/],
-  ["cazibe", /^(cazibe merkezleri|cazibe merkezi|cazibe)(?=[\s:\-–]|$)/],
-  ["yol", /^(yollar|yol)(?=[\s:\-–]|$)/],
+  ["yol", /^(otoyol[a-zçğıöşü]*|ana yollar|ana yol|çevre yolu[a-zçğıöşü]*|cevre yolu[a-zçğıöşü]*|yollar|yol)(?=[\s:\-–]|$)/],
+  ["cazibe", /^(cazibe merkezleri|cazibe merkezi|cazibe|avm(?:['’]?[a-zçğıöşü]+)?|alışveriş merkezleri|alışveriş merkezi|alisveris merkezleri|alisveris merkezi)(?=[\s:\-–]|$)/],
+  ["elle", /^(önemli yerler|önemli yer|önemli|onemli yerler|onemli yer|onemli|çevre bilgisi|cevre bilgisi|çevre|cevre)(?=[\s:\-–]|$)/],
   ["imar", /^(imar planı bilgisi|imar planı|imar)(?=[\s:\-–]|$)/],
   ["doga", /^(doğa ve yapılaşma bilgisi|doğa ve yapılaşma|doğa|doga)(?=[\s:\-–]|$)/],
   ["seslendirme", /^(seslendirme|anlatım|anlatim)(?=[\s:\-–]|$)/],
@@ -1023,16 +1023,18 @@ function talimatCoz(metin) {   // başlık yoksa konum sayılır (ada/parsel ya 
 }
 async function konumUygula(t) {   // talimattaki il, ilçe ve mahalle/köyü TKGM listelerinde bulup seçim kutularına yazar
   const metinler = [t.konum.join(" "), t.tum].filter(v => v.trim());
+  const onceki = { ilce: $("ilce").value, mah: $("mah").value };   // talimatta yazılmayan konum ekrandaki seçimden alınır
   const il = yerBul(await tkgmListe("/idariYapi/ilListe"), metinler);
   if (il) $("il").value = il.id;
   const ilceListe = await tkgmListe("/idariYapi/ilceListe/" + $("il").value);
   const ilce = yerBul(ilceListe, metinler);
-  secenekDoldur($("ilce"), ilceListe, ilce ? ilce.id : $("ilce").value);
+  if (!ilce && !ilceListe.some(o => String(o.id) === onceki.ilce)) return { tamam: false, mesaj: "İlçe seçin ya da talimata ilçe adını yazın." };
+  secenekDoldur($("ilce"), ilceListe, ilce ? ilce.id : onceki.ilce);
   const mahListe = await tkgmListe("/idariYapi/mahalleListe/" + $("ilce").value);
   mahTum = mahListe;
   const mah = yerBul(mahListe, metinler);
-  if (!mah && !$("konumDetay").open) return { tamam: false, mesaj: "Mahalle ya da köy adı bulunamadı. Talimata “Kocatepe mahallesi 123 ada 4 parsel” gibi yazın ya da “Elle konum” bölümünü açın." };
-  secenekDoldur($("mah"), mahListe, mah ? mah.id : $("mah").value);
+  if (!mah && !mahListe.some(o => String(o.id) === onceki.mah)) return { tamam: false, mesaj: "Mahalle ya da köy seçin ya da talimata adını yazın (örnek: “Kocatepe mahallesi 123 ada 4 parsel”)." };
+  secenekDoldur($("mah"), mahListe, mah ? mah.id : onceki.mah);
   if (!$("mah").value) return { tamam: false, mesaj: "Mahalle ya da köy seçilmedi." };
   const adiOku = s => s.options[s.selectedIndex] ? s.options[s.selectedIndex].textContent : "";
   return { tamam: true, il: adiOku($("il")), ilce: adiOku($("ilce")), mah: adiOku($("mah")) };
@@ -1081,7 +1083,7 @@ async function calistir() {
   if (!parsel) { durum("Parsel numarasını yazın. Örnek: “Kocatepe mahallesi 123 ada 4 parsel”.", null, true); $("konumDetay").open = true; return; }
   let konum;
   try { konum = await konumUygula(t); } catch (e) { durum("İl, ilçe ya da mahalle listesi alınamadı: " + e.message, null, true); return; }
-  if (!konum.tamam) { durum(konum.mesaj, null, true); $("konumDetay").open = true; return; }
+  if (!konum.tamam) { durum(konum.mesaj, null, true); return; }
   $("ada").value = ada; $("parsel").value = parsel;
   durum(`Konum: ${konum.il} / ${konum.ilce} / ${konum.mah} · ${ada} ada ${parsel} parsel`);
   if (!sesCtx) sesCtx = new (window.AudioContext || window.webkitAudioContext)();
