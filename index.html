@@ -95,12 +95,13 @@
     <label for="kYetki">Yetki belgesi numarası</label><input id="kYetki" autocomplete="off">
     <label for="sesAnahtar">Yapay ses anahtarı (Azure Speech)</label><input id="sesAnahtar" type="password" autocomplete="off">
     <label for="sesBolge">Ses bölgesi</label><input id="sesBolge" autocomplete="off" placeholder="westeurope">
+    <div class="ipucu">Seslendirme için Azure Speech kaynağının anahtarı ve bölgesi gerekir; anahtar yoksa video hazırlanmaz.</div>
     <label for="kalite">Kalite</label>
     <select id="kalite"><option value="720">HD 720 (hızlı)</option><option value="1080">Full HD 1080</option></select>
     <div class="ipucu">Video takılırsa HD 720 seçin.</div>
   </details>
   <div class="ipucu">Ana ekrana eklemek için tarayıcı menüsünden “Ana ekrana ekle”yi seçin.</div>
-  <div class="ipucu" id="surum">Sürüm 5</div>
+  <div class="ipucu" id="surum">Sürüm 6</div>
 </div>
 
 <div id="sahne" hidden>
@@ -540,7 +541,7 @@ function hud(t) {
 
   // --- özet listesi (O) ---
   if (ozetA > 0.02 && S.yerler.length) {
-    const sat = 5.6 * u, bas = 5 * u, gruplar = [["sizin", "ÖNEMLİ YERLER"], ["cevre", "YAKIN ÇEVRE"], ["cazibe", "CAZİBE MERKEZLERİ"]].filter(g => S.yerler.some(y => y.grup === g[0]));
+    const sat = 5.6 * u, bas = 5 * u, gruplar = [["sizin", "ÖNEMLİ YERLER"], ["cevre", "YAKIN ÇEVRE"], ["cazibe", "CAZİBE MERKEZLERİ"], ["yol", "YOLLAR"]].filter(g => S.yerler.some(y => y.grup === g[0]));
     const w = dikey ? W - 2 * kenar : 84 * u, h = S.yerler.length * sat + gruplar.length * bas + 6.5 * u;
     const x = (W - w) / 2, y0 = sinirla(ustAlt + (altSinir - ustAlt - h) / 2, ustAlt, Math.max(ustAlt, altSinir - h));
     ctx.globalAlpha = ozetA * 0.45; ctx.fillStyle = "#06090d"; ctx.fillRect(0, ustAlt - 2 * u, W, H); ctx.globalAlpha = ozetA;
@@ -643,6 +644,26 @@ async function elleYerGetir(p, metin, ilerle) {   // elle yazılan önemli yerle
   return { yerler, atlanan };
 }
 
+async function yollar(lat, lon, ilerle) {   // arsaya en yakın çevre yolu ve bir ana yol (Overpass; yanıt yoksa boş)
+  ilerle("Yollar aranıyor…");
+  const ham = await overpass(`[out:json][timeout:15];way(around:6000,${lat},${lon})["highway"~"^(motorway|trunk|primary)$"]["name"];out tags geom;`, 18000);
+  if (!ham) return [];
+  const en = {};   // yol adı → arsaya en yakın nokta
+  for (const yol of ham) {
+    const ad = yol.tags && yol.tags.name, geo = yol.geometry || [];
+    if (!ad || !geo.length) continue;
+    const anahtar = trSade(ad);
+    for (const g of geo) {
+      const m = mesafeM(lat, lon, g.lat, g.lon);
+      if (!en[anahtar] || m < en[anahtar].m) en[anahtar] = { ad, lat: g.lat, lon: g.lon, m };
+    }
+  }
+  const liste = Object.values(en).sort((x, y) => x.m - y.m);
+  const cevre = liste.find(y => /cevre|o-20/.test(trSade(y.ad)));
+  const ana = liste.find(y => y !== cevre);
+  return [cevre && { ...cevre, kategori: "Çevre yolu" }, ana && { ...ana, kategori: "Ana yol" }].filter(Boolean)
+    .map(y => ({ ad: y.ad, tur: "yol", lat: y.lat, lon: y.lon, m: y.m, kategori: y.kategori, renk: "#e8edf3", grup: "yol" }));
+}
 function koordCoz(metin) {   // "enlem, boylam" → [boylam, enlem]
   const k = String(metin || "").trim().match(/^(-?\d{1,2}[.,]\d+)\s*[, ]\s*(\d{1,3}[.,]\d+)$/);
   return k ? [+k[2].replace(",", "."), +k[1].replace(",", ".")] : null;
@@ -739,7 +760,8 @@ async function hazirla(a, ilerle = () => { }) {
   const cazibe = await cazibeMerkezleri(p.lat, p.lon, 10000, 5, m => ilerle(m, 0.3));
   const elle = await elleYerGetir(p, a.elle, m => ilerle(m, 0.32));
   S.atlanan = elle.atlanan;
-  S.yerler = elle.yerler.concat(cevre, cazibe).map((y, i) => ({ ...y, no: i + 1, mesafe: mesafeYazi(y.m) }));
+  const yolListe = await yollar(p.lat, p.lon, m => ilerle(m, 0.34));
+  S.yerler = elle.yerler.concat(cevre, cazibe, yolListe).map((y, i) => ({ ...y, no: i + 1, mesafe: mesafeYazi(y.m) }));
   const enUzak = Math.max(900, ...S.yerler.map(y => y.m));
   S.genis = sinirla(Math.max(enUzak * (dikey ? 3.0 : 2.3), p.cap * 4), 1200, 32000);
   S.yakin = Math.min(Math.max(p.cap * (dikey ? 2.6 : 1.8), 300), S.genis);
