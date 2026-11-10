@@ -42,6 +42,7 @@
   .ipucu{font-size:14px;color:var(--soluk);margin-top:8px;line-height:1.4}
   #sahne{position:fixed;inset:0;background:#000;display:flex;flex-direction:column;z-index:5}
   #cikti{flex:1;min-height:0;width:100%;object-fit:contain;background:#000}
+  #kalan{position:absolute;top:calc(12px + env(safe-area-inset-top,0px));right:12px;display:none;background:rgba(12,16,22,.82);color:#ffd24a;font:800 17px Inter,system-ui,sans-serif;padding:6px 11px;border-radius:10px;z-index:6;pointer-events:none}
   #dugmeler{display:flex;gap:8px;padding:10px 10px calc(10px + env(safe-area-inset-bottom,0px));background:var(--zemin)}
   #dugmeler button{min-height:54px;font-size:17px;font-weight:700;padding:8px 6px}
   #bilgi{padding:8px 14px 0;font-size:15px;color:var(--soluk);background:var(--zemin);min-height:28px}
@@ -70,6 +71,14 @@
   <input id="satilik" inputmode="numeric" autocomplete="off" placeholder="Örn. 300">
   <label for="elle">Önemli yerler (her satıra bir ad, en fazla 4)</label>
   <textarea id="elle" rows="2" autocomplete="off" placeholder="Sinpaş, Park Oran, Panora"></textarea>
+  <label for="cazibeGir">Cazibe merkezleri (her satıra bir ad, en fazla 4)</label>
+  <textarea id="cazibeGir" rows="2" autocomplete="off" placeholder="Ankara Kalesi, Kuğulu Park, Atakule"></textarea>
+  <label for="yolGir">Yollar (her satıra bir ad, en fazla 4)</label>
+  <textarea id="yolGir" rows="2" autocomplete="off" placeholder="Eskişehir Yolu, Çevre Yolu"></textarea>
+  <label for="imarGir">İmar planı bilgisi (isteğe bağlı, en fazla 500 karakter)</label>
+  <textarea id="imarGir" rows="3" autocomplete="off" maxlength="500"></textarea>
+  <label for="dogaGir">Doğa ve yapılaşma bilgisi (isteğe bağlı, en fazla 500 karakter)</label>
+  <textarea id="dogaGir" rows="3" autocomplete="off" maxlength="500"></textarea>
   <label for="hisseKml">Satılık hisse sınırı: KML dosyası (isteğe bağlı)</label>
   <input id="hisseKml" type="file" accept=".kml,application/vnd.google-earth.kml+xml">
   <label for="hisseKoor">…ya da köşe koordinatları (her satıra “enlem, boylam”)</label>
@@ -100,11 +109,12 @@
     <div class="ipucu">Video takılırsa HD 720 seçin.</div>
   </details>
   <div class="ipucu">Ana ekrana eklemek için tarayıcı menüsünden “Ana ekrana ekle”yi seçin.</div>
-  <div class="ipucu" id="surum">Sürüm 9</div>
+  <div class="ipucu" id="surum">Sürüm 10</div>
 </div>
 
 <div id="sahne" hidden>
   <canvas id="cikti"></canvas>
+  <div id="kalan"></div>
   <div id="bilgi"></div>
   <div id="dugmeler">
     <button id="bOynat">▶ Oynat</button>
@@ -368,9 +378,11 @@ function yolKes(yol, f) {      // yolun f (0..1) kadarı: {nokta dizisi, uç}
 function planla() {
   const n = S.yerler.length, u = S.uzun, var_ = S.sehir && S.sehirM > 1500;
   const P = { A: var_ ? (u ? 3.5 : 2.2) : 0, B: var_ ? (u ? 9 : 5) : 0, C: u ? 2.5 : 1.6, D: n * (u ? 1.6 : 1.0),
-              O: n ? (u ? 3.5 : 2.4) : 0, E: u ? 7.5 : 5 };
+              O: n ? (u ? 3.5 : 2.4) : 0, E: u ? 7.5 : 5, G: 0 };
+  const yaziKarakter = S.metin ? S.metin.imar.length + S.metin.doga.length : 0;
+  P.G = yaziKarakter ? Math.max(8, 3 + yaziKarakter / 13) : 0;
   let t = 0; S.Z = {};
-  for (const k of "ABCDOE") { S.Z[k] = [t, t + P[k]]; t += P[k]; }
+  for (const k of "ABCDOEG") { S.Z[k] = [t, t + P[k]]; t += P[k]; }
   S.sure = t; S.adim = u ? 1.6 : 1.0;
 }
 const faz = (k, t) => { const [a, b] = S.Z[k]; return b > a ? sinirla((t - a) / (b - a), 0, 1) : (t >= a ? 1 : 0); };
@@ -459,6 +471,18 @@ function etiket(x, y, ust, alt, renk, buyuk, sinir) {   // noktanın üstünde i
   return [kx, ky, w, h];
 }
 
+function metinSatirlari(metin, enCok, fs) {   // paragrafları kelimelere göre satırlara böler (fs: yazı boyu, px)
+  yaz(fs, 600); const satirlar = [];
+  for (const para of String(metin).split(/\n+/)) {
+    let s = "";
+    for (const k of para.split(/\s+/).filter(Boolean)) {
+      const aday = s ? s + " " + k : k;
+      if (ctx.measureText(aday).width > enCok && s) { satirlar.push(s); s = k; } else s = aday;
+    }
+    if (s) satirlar.push(s);
+  }
+  return satirlar;
+}
 function hud(t) {
   const W = S.W, H = S.H, u = S.u, p = S.p, Z = S.Z, dikey = H > W, k = S.kart;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -569,7 +593,7 @@ function hud(t) {
   }
 
   // --- parsel bilgisi (E) ---
-  if (t >= Z.E[0] + 0.8) {
+  if (t >= Z.E[0] + 0.8 && t < Z.G[0]) {
     const a = yumusak((t - Z.E[0] - 0.8) / 0.8) , w = dikey ? W - 2 * kenar : 70 * u, h = 25 * u, x = (W - w) / 2, y0 = altSinir - h - 2 * u;
     ctx.globalAlpha = a; kutuCiz(x, y0, w, h, 2 * u, "rgba(12,16,22,.88)"); ctx.textAlign = "center";
     yaz(10 * u, 800); ctx.fillStyle = "#ffd24a"; ctx.fillText(p.satilik ? p.satilik + " m²" : `${p.ada} / ${p.parsel}`, W / 2, y0 + 2 * u);
@@ -577,6 +601,29 @@ function hud(t) {
     if (S.sehir) { yaz(3.4 * u, 600); ctx.fillStyle = "#d5dbe3";
       ctx.fillText(sigdir(`${S.sehir.etiket}: ` + (S.yolBilgi ? `arabayla ${S.yolBilgi.dk} dk` : mesafeYazi(S.sehirM) + " (kuş uçuşu)"), w - 4 * u), W / 2, y0 + 19.2 * u); }
     ctx.textAlign = "left"; ctx.globalAlpha = 1;
+  }
+
+  // --- imar ve doğa anlatımı (G): metin ekranda, aynı anda seslendirilir ---
+  if (Z.G[1] > Z.G[0] && t >= Z.G[0]) {
+    const a = yumusak((t - Z.G[0]) / 0.5), w = dikey ? W - 2 * kenar : 88 * u, x = (W - w) / 2, enCok = w - 6 * u, maxYuk = altSinir - ustAlt - 4 * u;
+    const bloklar = [["İMAR PLANI", S.metin.imar], ["DOĞA VE YAPILAŞMA", S.metin.doga]].filter(b => b[1]);
+    let fs = 3.8, satirlar = [], yuk = 0;
+    for (;;) {
+      satirlar = bloklar.map(b => metinSatirlari(b[1], enCok, fs * u));
+      yuk = 3 * u + satirlar.reduce((n, sat) => n + 5.5 * u + sat.length * fs * 1.35 * u + 1.2 * u, 0);
+      if (yuk <= maxYuk || fs <= 2.4) break;
+      fs -= 0.2;
+    }
+    const y0 = ustAlt + Math.max(0, (altSinir - ustAlt - yuk) / 2);
+    ctx.globalAlpha = a; kutuCiz(x, y0, w, yuk, 2 * u, "rgba(12,16,22,.9)");
+    let yy = y0 + 2 * u;
+    bloklar.forEach((b, i) => {
+      yaz(2.9 * u, 800); ctx.fillStyle = "#ffcf3f"; ctx.fillText(b[0], x + 3 * u, yy); yy += 5.5 * u;
+      yaz(fs * u, 600); ctx.fillStyle = "#fff";
+      for (const sat of satirlar[i]) { ctx.fillText(sat, x + 3 * u, yy); yy += fs * 1.35 * u; }
+      yy += 1.2 * u;
+    });
+    ctx.globalAlpha = 1;
   }
 
   // --- kaynak satırı ---
@@ -597,7 +644,12 @@ async function kare(t, enCokMs = 8000) {   // karolar gelene kadar bekleyip tek 
   hud(t);
   return tamam;
 }
-function kareHizli(t) { t = sinirla(t, 0, S.sure - 0.001); kamera(t); viewer.render(); hud(t); }
+function kareHizli(t) { t = sinirla(t, 0, S.sure - 0.001); kamera(t); viewer.render(); hud(t); kalanGoster(t); }
+function kalanGoster(t) {   // köşede kalan süre; yalnızca ekranda görünür, videoya girmez
+  const el = $("kalan"); if (!el) return;
+  const kalan = Math.max(0, Math.round(S.sure - t));
+  el.textContent = `Kalan ${Math.floor(kalan / 60)}:${String(kalan % 60).padStart(2, "0")}`; el.style.display = "block";
+}
 
 /* ---------------- Başlangıç noktası ve önemli yerler ---------------- */
 async function baslangicBul(metin, il) {   // boşsa il merkezi; "enlem, boylam" ya da yer adı kabul edilir
@@ -609,8 +661,8 @@ async function baslangicBul(metin, il) {   // boşsa il merkezi; "enlem, boylam"
   if (!d) throw new Error(`Başlangıç noktası bulunamadı: “${s}”. Yer adını değiştirin ya da enlem, boylam yazın.`);
   return { ad: s, alt: s, etiket: s, lat: +d.lat, lon: +d.lon };
 }
-async function elleYerGetir(p, metin, ilerle) {   // elle yazılan önemli yerler; arsaya 25 km'den uzakta olanlar atlanır
-  const liste = String(metin || "").split(/[\n,]+/).map(s => s.trim()).filter(Boolean).slice(0, 4);
+async function yazilanYerGetir(p, metin, enCok, grup, kategori, renk, ilerle) {   // yazılan yerler; arsaya 25 km'den uzakta olanlar atlanır
+  const liste = String(metin || "").split(/[\n,]+/).map(s => s.trim()).filter(Boolean).slice(0, enCok);
   const yerler = [], atlanan = [];
   for (const ad of liste) {
     ilerle(`“${ad}” aranıyor…`);
@@ -618,7 +670,7 @@ async function elleYerGetir(p, metin, ilerle) {   // elle yazılan önemli yerle
     if (!d) d = (await nomi({ q: `${ad} ${p.il || ""}`.trim(), limit: 1 }))[0];
     const m = d ? mesafeM(p.lat, p.lon, +d.lat, +d.lon) : Infinity;
     if (!d || m > 25000) { atlanan.push(ad); continue; }
-    yerler.push({ ad, tur: "elle", lat: +d.lat, lon: +d.lon, m, kategori: "Önemli yer", renk: "#ffcf3f", grup: "sizin" });
+    yerler.push({ ad, tur: grup, lat: +d.lat, lon: +d.lon, m, kategori, renk, grup });
   }
   return { yerler, atlanan };
 }
@@ -673,6 +725,8 @@ function seslendirmeSatirlari() {   // her satır: videonun hangi saniyesinde ba
   if (S.sehir) satir.push({ at: Z.A[0] + 0.3, metin: `${S.sehir.ad} ile arsa arası ${S.yolBilgi ? `arabayla yaklaşık ${S.yolBilgi.dk} dakika` : mesafeSoz(S.sehirM) + " kuş uçuşu"}.` });
   S.yerler.forEach((y, i) => satir.push({ at: Z.D[0] + i * S.adim + 0.15, metin: `${y.ad}, ${mesafeSoz(y.m)}.` }));
   satir.push({ at: Z.E[0] + 0.9, metin: S.yapi ? (p.satilik ? `Yapı burada. Satılık hisse, ${p.satilik} metrekare.` : "Yapı burada.") : p.satilik ? `Satılık hisse, ${p.satilik} metrekare.` : "Arsamız burada." });
+  if (S.metin && S.metin.imar) satir.push({ at: Z.G[0] + 0.5, metin: `İmar planı. ${S.metin.imar.replace(/\s+/g, " ")}` });
+  if (S.metin && S.metin.doga) satir.push({ at: Z.G[0] + 0.5, metin: `Doğa ve yapılaşma. ${S.metin.doga.replace(/\s+/g, " ")}` });
   return satir.filter(s => s.metin.replace(/[\s.,:]/g, "").length > 0);
 }
 async function azureSes(metin, anahtar, bolge) {
@@ -734,9 +788,12 @@ async function hazirla(a, ilerle = () => { }) {
     if (S.sehirM > 1500) S.yol = yolHazirla(nokta);
     S.yon = yon(S.sehir.lat, S.sehir.lon, p.lat, p.lon);
   } else S.yon = -25;
-  const elle = await elleYerGetir(p, a.elle, m => ilerle(m, 0.32));
-  S.atlanan = elle.atlanan;
-  S.yerler = elle.yerler.map((y, i) => ({ ...y, no: i + 1, mesafe: mesafeYazi(y.m) }));
+  const elle = await yazilanYerGetir(p, a.elle, 4, "sizin", "Önemli yer", "#ffcf3f", m => ilerle(m, 0.32));
+  const cazibe = await yazilanYerGetir(p, a.cazibe, 4, "cazibe", "Cazibe merkezi", "#7fe3a0", m => ilerle(m, 0.34));
+  const yol = await yazilanYerGetir(p, a.yol, 4, "yol", "Yol", "#e8edf3", m => ilerle(m, 0.36));
+  S.atlanan = [...elle.atlanan, ...cazibe.atlanan, ...yol.atlanan];
+  S.metin = { imar: (a.imar || "").trim().slice(0, 500), doga: (a.doga || "").trim().slice(0, 500) };
+  S.yerler = [...elle.yerler, ...cazibe.yerler, ...yol.yerler].map((y, i) => ({ ...y, no: i + 1, mesafe: mesafeYazi(y.m) }));
   const enUzak = Math.max(900, ...S.yerler.map(y => y.m));
   S.genis = sinirla(Math.max(enUzak * (dikey ? 3.0 : 2.3), p.cap * 4), 1200, 32000);
   S.yakin = Math.min(Math.max(p.cap * (dikey ? 2.6 : 1.8), 300), S.genis);
@@ -846,7 +903,7 @@ async function calistir() {
   const yapi = yapiMetin ? koordCoz(yapiMetin) : null;
   if (yapiMetin && !yapi) { durum("Yapı işareti “enlem, boylam” biçiminde olmalı.", null, true); return; }
   const a = { il: sec("il").textContent, ilce: sec("ilce").textContent, mahalle: sec("mah").textContent, mahId: $("mah").value,
-    ada: $("ada").value.trim() || "0", parsel: $("parsel").value.trim(), bicim: $("bicim").value, uzunluk: $("uzunluk").value, kalite: +$("kalite").value, satilik: $("satilik").value.trim(), baslangic: $("baslangic").value.trim(), elle: $("elle").value, hisse, yapi, kart: kartOku() };
+    ada: $("ada").value.trim() || "0", parsel: $("parsel").value.trim(), bicim: $("bicim").value, uzunluk: $("uzunluk").value, kalite: +$("kalite").value, satilik: $("satilik").value.trim(), baslangic: $("baslangic").value.trim(), elle: $("elle").value, cazibe: $("cazibeGir").value, yol: $("yolGir").value, imar: $("imarGir").value, doga: $("dogaGir").value, hisse, yapi, kart: kartOku() };
   for (const [k, v] of [["il", a.il], ["ilce", a.ilce], ["mah", a.mahalle], ["bicim", a.bicim], ["uzunluk", a.uzunluk], ["kalite", a.kalite], ["firma", a.kart.firma], ["isim", a.kart.isim], ["tel", a.kart.tel], ["ilan", a.kart.ilan], ["yetki", a.kart.yetki], ["sesAnahtar", sesAnahtar], ["sesBolge", sesBolge]]) sakla.yaz(k, v);
   $("basla").disabled = true; sonVideo = null; $("bIndir").hidden = true; $("bPaylas").hidden = true;
   try {
