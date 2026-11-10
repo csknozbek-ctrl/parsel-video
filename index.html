@@ -94,7 +94,7 @@
     <div class="ipucu">Video takılırsa HD 720 seçin.</div>
   </details>
   <div class="ipucu">Ana ekrana eklemek için tarayıcı menüsünden “Ana ekrana ekle”yi seçin.</div>
-  <div class="ipucu" id="surum">Sürüm 16</div>
+  <div class="ipucu" id="surum">Sürüm 17</div>
 </div>
 
 <div id="haritaKutu" hidden style="position:fixed;inset:0;z-index:50;background:#0c1016;display:flex;flex-direction:column">
@@ -846,6 +846,9 @@ async function sesHazirla(anahtar, ilerle) {
     sesler.push({ at, buf }); bitis = at + buf.duration + 0.05;
   }
   S.sesler = sesler;
+  // son seslendirme (kapanış dahil) video bitmeden tamamen bitsin: video süresi sesin bitişine göre uzar
+  const sesBitis = Math.max(0, ...sesler.map(s => s.at + s.buf.duration));
+  if (sesBitis + 0.8 > S.sure) S.sure = sesBitis + 0.8;
 }
 function sesDur() { for (const k of aktifSesler) { try { k.stop(); } catch (e) { } } aktifSesler = []; }
 let muzikBuf = null;   // arka plan müziği (döngülü); yüklenemezse video müziksiz hazırlanır
