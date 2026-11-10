@@ -195,7 +195,7 @@ async function tkgmListe(yol) {
 async function parselGetir(mahId, ada, parsel) {
   let v;
   try { v = await getir(`${TKGM}/parsel/${mahId}/${encodeURIComponent(ada)}/${encodeURIComponent(parsel)}`, TKGM_AYAR); }
-  catch (e) { throw new Error(`Bu ada/parsel TKGM'de bulunamadı ya da TKGM yanıt vermedi (${e.message}).`); }
+  catch (e) { throw new Error(`Bu parsel TKGM'de bulunamadı: ${ada} ada ${parsel} parsel. Ada ve parsel numarasını kontrol edin. (${e.message})`); }
   const g = v.geometry || {};
   let h = g.type === "Polygon" ? g.coordinates[0] : g.type === "MultiPolygon" ? g.coordinates.map(p => p[0]).sort((a, b) => b.length - a.length)[0] : null;
   if (!h) throw new Error("TKGM bu parsel için sınır bilgisi döndürmedi.");
@@ -960,10 +960,21 @@ const TALIMAT_BOLUM = [   // başlık (küçük harf) → bölüm adı
   ["seslendirme", /^(seslendirme|anlatım|anlatim)(?=[\s:\-–]|$)/],
   ["vurgu", /^(vurgulanacaklar|vurgulanacak|vurgula|vurgu)(?=[\s:\-–]|$)/],
 ];
-const ADA_RE = /(\d+)\s*(?:nolu\s*)?ada\b|\bada\s*(?:no\s*)?:?\s*(\d+)/i;
-const PARSEL_RE = /(\d+)\s*(?:nolu\s*)?parsel\b|\bparsel\s*(?:no\s*)?:?\s*(\d+)/i;
 const KONUM_KELIME = ["mahalle", "mahallesi", "mah", "ilçe", "ilçesi", "köy", "köyü"];
-const konumMi = s => ADA_RE.test(s) || PARSEL_RE.test(s) || s.toLocaleLowerCase("tr-TR").split(/[\s,.;:()]+/).some(w => KONUM_KELIME.includes(w));
+function adaParsel(s) {   // "123 ada 4 parsel", "ada 123 parsel 4", "ada: 12, parsel: 3", "parsel 4 ada 123" ve ekli yazımları (adası, parseli) okur
+  const A = "ada(?:s[ıi])?(?![a-zçğıöşü])", P = "parsel(?:[ıi])?(?![a-zçğıöşü])", N = "(?:nolu\\s*|no\\s*)?";
+  const kalip = p => new RegExp(p, "i");
+  const cift = [
+    [kalip(`(\\d+)\\s*${N}${A}\\W+${N}(\\d+)\\s*${N}${P}`), 1, 2],          // 123 ada 4 parsel
+    [kalip(`${A}\\s*${N}:?\\s*(\\d+)\\W+${P}\\s*${N}:?\\s*(\\d+)`), 1, 2],  // ada 123 parsel 4
+    [kalip(`${P}\\s*${N}:?\\s*(\\d+)\\W+${A}\\s*${N}:?\\s*(\\d+)`), 2, 1],  // parsel 4 ada 123
+  ];
+  for (const [re, ai, pi] of cift) { const m = s.match(re); if (m) return { ada: m[ai], parsel: m[pi] }; }
+  const tekA = s.match(kalip(`(?:(\\d+)\\s*${N}${A}|${A}\\s*${N}:?\\s*(\\d+))`));
+  const tekP = s.match(kalip(`(?:(\\d+)\\s*${N}${P}|${P}\\s*${N}:?\\s*(\\d+))`));
+  return { ada: tekA ? (tekA[1] || tekA[2]) : "", parsel: tekP ? (tekP[1] || tekP[2]) : "" };
+}
+const konumMi = s => { const v = adaParsel(s); return !!(v.ada || v.parsel) || s.toLocaleLowerCase("tr-TR").split(/[\s,.;:()]+/).some(w => KONUM_KELIME.includes(w)); };
 const adSade = s => trSade(s).replace(/[^a-z0-9 ]+/g, " ").replace(/\b(mahallesi|mahalle|mah|koyu|koy|ilcesi|ilce|ili|il)\b/g, " ").replace(/\s+/g, " ").trim();
 function yerBul(liste, metinler) {   // metinlerde (önce konum satırları) geçen en uzun il / ilçe / mahalle adı
   for (const metin of metinler) {
@@ -979,7 +990,7 @@ function yerBul(liste, metinler) {   // metinlerde (önce konum satırları) ge�
 }
 function talimatCoz(metin) {   // başlık yoksa konum sayılır (ada/parsel ya da mahalle sözcüğü), yoksa önemli yer
   const r = { tum: String(metin || ""), konum: [], ada: "", parsel: "", baslangic: "", elle: [], cazibe: [], yol: [], imar: "", doga: "", seslendirme: [], vurgu: [] };
-  const konumIsle = s => { const a = s.match(ADA_RE), p = s.match(PARSEL_RE); if (a) r.ada = a[1] || a[2]; if (p) r.parsel = p[1] || p[2]; r.konum.push(s); };
+  const konumIsle = s => { const v = adaParsel(s); if (v.ada) r.ada = v.ada; if (v.parsel) r.parsel = v.parsel; r.konum.push(s); };
   const listeIsle = (bolum, s) => {
     for (const x of s.split(/[,\n]|\s+ve\s+/).map(v => v.trim()).filter(Boolean)) {
       const k = x.match(BASLA_RE);
