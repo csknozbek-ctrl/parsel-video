@@ -47,6 +47,8 @@
   .satir .ad{flex:1;min-width:0}
   .satir small{color:var(--soluk);font-size:13px;white-space:nowrap}
   #bolgeEkle{margin-top:10px}
+  #ilanBolum{margin-top:14px} #ilanBolum summary{font-size:16px;font-weight:600;color:var(--soluk);cursor:pointer;padding:8px 0}
+  #ilanBolum textarea{font-size:16px}
   #sahne{position:fixed;inset:0;background:#000;display:flex;flex-direction:column;z-index:5}
   #cikti{flex:1;min-height:0;width:100%;object-fit:contain;background:#000}
   #kalan{position:absolute;top:calc(12px + env(safe-area-inset-top,0px));right:12px;display:none;background:rgba(12,16,22,.82);color:#ffd24a;font:800 17px Inter,system-ui,sans-serif;padding:6px 11px;border-radius:10px;z-index:6;pointer-events:none}
@@ -79,6 +81,14 @@
     <div id="bolgeListe"></div>
     <button type="button" id="bolgeEkle" hidden>İşaretlileri talimata ekle</button>
   </div>
+  <details id="ilanBolum">
+    <summary>İlan bilgileri ve fotoğraflar (isteğe bağlı)</summary>
+    <label for="ilanMetin">İlan metni</label>
+    <textarea id="ilanMetin" rows="5" autocomplete="off" placeholder="İlan sayfasındaki yazıyı kopyalayıp buraya yapıştırın"></textarea>
+    <button type="button" id="ilanEkle" class="ikincil">İlan bilgilerini talimata ekle</button>
+    <label for="fotolar">İlan fotoğrafları (en çok 6)</label>
+    <input type="file" id="fotolar" accept="image/*" multiple>
+  </details>
   <details id="konumDetay">
     <summary>Ada ve parsel (talimatta yazılmadıysa)</summary>
     <div class="iki">
@@ -107,7 +117,7 @@
     <div class="ipucu">Video takılırsa HD 720 seçin.</div>
   </details>
   <div class="ipucu">Ana ekrana eklemek için tarayıcı menüsünden “Ana ekrana ekle”yi seçin.</div>
-  <div class="ipucu" id="surum">Sürüm 20</div>
+  <div class="ipucu" id="surum">Sürüm 21</div>
 </div>
 
 <div id="haritaKutu" hidden style="position:fixed;inset:0;z-index:50;background:#0c1016;display:flex;flex-direction:column">
@@ -383,11 +393,12 @@ function yolKes(yol, f) {      // yolun f (0..1) kadarı: {nokta dizisi, uç}
 function planla() {
   const n = S.yerler.length, u = S.uzun, var_ = S.sehir && S.sehirM > 1500;
   const P = { A: var_ ? (u ? 3.5 : 2.2) : 0, B: var_ ? (u ? 9 : 5) : 0, C: u ? 2.5 : 1.6, D: n * (u ? 1.6 : 1.0),
-              O: n ? (u ? 3.5 : 2.4) : 0, E: u ? 7.5 : 5, G: 0, F: 3 };
+              O: n ? (u ? 3.5 : 2.4) : 0, E: u ? 7.5 : 5, G: 0, F: 3, R: 0 };
   const yaziKarakter = S.metin ? S.metin.imar.length + S.metin.doga.length : 0;
   P.G = yaziKarakter ? Math.max(8, 3 + yaziKarakter / 13) : 0;
+  P.R = S.fotolar && S.fotolar.length ? S.fotolar.length * (u ? 3.2 : 2.4) : 0;   // ilan fotoğrafları: her biri birkaç saniye
   // talimatta süre yazıldıysa aşamalar ona göre ölçeklenir; seslendirme ve kamera yer adımları (adim) aynı oranda kayar
-  const TUM = "ABCDOEGF", topla = () => TUM.split("").reduce((s, k) => s + P[k], 0), natAdim = u ? 1.6 : 1.0;
+  const TUM = "ABCDOERGF", topla = () => TUM.split("").reduce((s, k) => s + P[k], 0), natAdim = u ? 1.6 : 1.0;
   S.adim = natAdim;
   if (S.hedefSure > 0 && topla() > 0) {
     const f = S.hedefSure / topla();
@@ -500,10 +511,57 @@ function metinSatirlari(metin, enCok, fs) {   // paragrafları kelimelere göre 
   return satirlar;
 }
 const MUZIK_KREDI = "Müzik: Fresh Lift – Shane Ivers (CC BY 4.0)";   // CC BY şartı: parça adı, sanatçı ve lisans her videoda görünür
+/* ---------------- İlan bilgileri ve fotoğraflar ---------------- */
+function ilanSade(s) { return String(s || "").toLocaleLowerCase("tr-TR").replace(/ı/g, "i").replace(/ş/g, "s").replace(/ğ/g, "g").replace(/ü/g, "u").replace(/ö/g, "o").replace(/ç/g, "c").replace(/²/g, "2").replace(/!/g, "i"); }
+function ilanCoz(metin) {   // ilan yazısından alanları çıkarır; kopyalanan ya da OCR ile okunan (bozuk Türkçe harfli) metinde de çalışır
+  const satirlar = String(metin || "").split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  const bul = etiket => {   // etiket satırda ya da hemen altındaki satırda değer olarak okunur
+    for (let i = 0; i < satirlar.length; i++) {
+      const m = ilanSade(satirlar[i]).match(etiket);
+      if (!m) continue;
+      return satirlar[i].slice(m[0].length).replace(/^[\s:\-!?]+/, "").replace(/^\(tl\)\s*/i, "").trim() || (satirlar[i + 1] || "").trim();
+    }
+    return "";
+  };
+  return {
+    fiyat: bul(/^fiyat\b/).replace(/[^0-9.,A-Za-z ]/g, "").trim(),
+    m2: (bul(/^m[2?]?(?=\s|$)/).match(/\d[\d.,]*/) || [""])[0],
+    aidat: (bul(/^aidat\b/).match(/\d[\d.,]*/) || [""])[0],
+    durum: bul(/^durumu\b/),
+    tapu: bul(/^tapu durumu\b/),
+    isitma: bul(/^isitma\b/),
+    yas: bul(/^bina yas\S*/),
+    ilanNo: (bul(/^ilan no\b/).match(/\d{6,}/) || [""])[0]
+  };
+}
+function ilanTalimatEkle() {   // ilan bilgilerinden talimat satırı üretir; talimatta zaten satılık yazılıysa dokunmaz
+  const i = ilanCoz($("ilanMetin").value), t = talimatCoz($("talimat").value), satirlar = [];
+  if (i.m2 && /satilik/.test(ilanSade(i.durum)) && !t.satilik) satirlar.push("Satılık: " + i.m2.replace(/\./g, ""));
+  const ozet = [i.fiyat && "Fiyat " + i.fiyat, i.m2 && i.m2 + " m²", i.aidat && "Aidat " + i.aidat + " TL", i.tapu, i.ilanNo && "İlan no " + i.ilanNo].filter(Boolean).join(" · ");
+  if (satirlar.length) talimatSatirEkle(satirlar);
+  durum(ozet ? `Okunan: ${ozet}${satirlar.length ? ". Talimata eklendi: " + satirlar.join(", ") : ""}` : "İlan metninden bilgi okunamadı. Metni kontrol edin.");
+}
+function fotoCiz(t) {   // fotoğraf bölümü: her fotoğraf kendi süresinde yumuşakça belirir, alt bantta ilan özeti
+  const W = S.W, H = S.H, u = S.u, n = S.fotolar.length, a = S.Z.R[0], sure = (S.Z.R[1] - a) / n;
+  const i = Math.min(n - 1, Math.max(0, Math.floor((t - a) / sure))), yerel = t - a - i * sure;
+  const gorunum = Math.max(0, Math.min(1, yerel / 0.4, (sure - yerel) / 0.4));
+  const img = S.fotolar[i], oran = Math.max(W / img.width, H / img.height), w = img.width * oran, h = img.height * oran;
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.fillStyle = "#0c1016"; ctx.fillRect(0, 0, W, H);
+  ctx.globalAlpha = gorunum; ctx.drawImage(img, (W - w) / 2, (H - h) / 2, w, h); ctx.globalAlpha = 1;
+  if (S.fotoAlt) {
+    const bantY = H - 15 * u;
+    ctx.fillStyle = "rgba(12,16,22,.82)"; ctx.fillRect(0, bantY, W, 15 * u);
+    ctx.font = `800 ${Math.round(6 * u)}px ${YAZITIPI}`; ctx.fillStyle = "#ffd24a";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(sigdir(S.fotoAlt, W - 8 * u), W / 2, bantY + 7.5 * u);
+    ctx.textAlign = "left"; ctx.textBaseline = "top";
+  }
+}
 function hud(t) {
   const W = S.W, H = S.H, u = S.u, p = S.p, Z = S.Z, dikey = H > W, k = S.kart;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.globalAlpha = 1;
+  if (S.fotolar && S.fotolar.length && t >= Z.R[0] && t < Z.R[1]) { fotoCiz(t); return; }   // fotoğraf bölümü: harita yerine ilan fotoğrafları
   ctx.drawImage(viewer.canvas, 0, 0, W, H);
   ctx.textBaseline = "top"; ctx.textAlign = "left";
   const kenar = 3.5 * u;
@@ -936,6 +994,7 @@ async function hazirla(a, ilerle = () => { }) {
   const W = dikey ? kisa : Math.round(kisa * 16 / 9), H = dikey ? Math.round(kisa * 16 / 9) : kisa;
   S = { p, W, H, u: Math.min(W, H) / 100, uzun: a.uzunluk !== "kisa", kart: a.kart || KART, yerler: [], hedefSure: a.sureSaniye || 0 };
   S.hisse = a.hisse || null;
+  S.fotolar = a.fotolar || []; S.fotoAlt = a.fotoAlt || "";
   S.yapi = a.yapi ? { lon: a.yapi[0], lat: a.yapi[1] } : null;
   S.hedef = S.yapi ? { ...S.yapi, ad: "Yapı" } : S.hisse ? (() => { const [la, lo] = alanMerkezi(S.hisse); return { lat: la, lon: lo, ad: "Satılık hisse" }; })() : null;
   ilerle("Başlangıç ve yol bulunuyor…", 0.08);
@@ -1328,6 +1387,7 @@ async function formBasla() {
   $("haritaAc").onclick = haritaAc;
   $("bolgeAc").onclick = bolgeListele;
   $("bolgeEkle").onclick = bolgeEkle;
+  $("ilanEkle").onclick = ilanTalimatEkle;
   $("haritaIptal").onclick = () => { $("haritaKutu").hidden = true; };
   $("haritaTamam").onclick = () => { if (!haritaSecim) return; talimatEkle(`Başlangıç: ${haritaSecim.lat.toFixed(5)}, ${haritaSecim.lng.toFixed(5)}`); $("haritaKutu").hidden = true; };
   $("bOynat").onclick = () => { dugmeKilit(true); oynat(() => dugmeKilit(false)); };
@@ -1343,7 +1403,7 @@ async function calistir() {
   const t = talimatCoz($("talimat").value);
   sakla.yaz("talimat", $("talimat").value);
   const eksik = [];   // zorunlu bilgiler yazılmadıysa üretimden önce sorulur
-  if (!t.satilik) eksik.push("satılık m²");
+  if (!t.satilik && !ilanCoz($("ilanMetin").value).m2) eksik.push("satılık m²");
   if (!t.ilan) eksik.push("ilan linki");
   if (!t.yetki) eksik.push("yetki belgesi no");
   if (!t.seslendirme.length) eksik.push("seslendirme cümleleri");
@@ -1360,8 +1420,13 @@ async function calistir() {
   const kmlDosya = $("hisseKml").files[0], hisseKoor = $("hisseKoor").value;
   const hisse = hisseCoz(kmlDosya ? await kmlDosya.text() : "", hisseKoor);
   if ((kmlDosya || hisseKoor.trim()) && !hisse) { durum("Hisse sınırı okunamadı. KML dosyasını ya da en az 3 koordinat satırını kontrol edin.", null, true); return; }
+  const ilan = ilanCoz($("ilanMetin").value);
+  const ilanSatilik = ilan.m2 && /satilik/.test(ilanSade(ilan.durum)) ? ilan.m2.replace(/\./g, "") : "";
+  const ilanOzet = [ilan.fiyat, ilan.m2 ? ilan.m2 + " m²" : ""].filter(Boolean).join(" · ");
+  const fotolar = [];   // en çok 6 fotoğraf; okunamayan dosyalar atlanır
+  for (const f of [...($("fotolar").files || [])].slice(0, 6)) { try { fotolar.push(await createImageBitmap(f)); } catch (e) { } }
   const a = { il: konum.il, ilce: konum.ilce, mahalle: konum.mah, mahId: $("mah").value,
-    ada, parsel, bicim: t.bicim || "dikey", uzunluk: t.sure || "uzun", sureSaniye: t.sureSaniye || 0, koordlar: t.koordlar, kalite: +$("kalite").value, satilik: t.satilik,
+    ada, parsel, bicim: t.bicim || "dikey", uzunluk: t.sure || "uzun", sureSaniye: t.sureSaniye || 0, koordlar: t.koordlar, fotolar, fotoAlt: ilanOzet, kalite: +$("kalite").value, satilik: t.satilik || ilanSatilik,
     baslangic: t.baslangic, elle: t.elle.join("\n"), cazibe: t.cazibe.join("\n"), yol: t.yol.join("\n"), imar: t.imar, doga: t.doga,
     seslendirme: t.seslendirme, vurgu: t.vurgu, kategoriler: t.kategoriler, hisse, yapi: t.yapi,
     kart: { firma: t.firma || KART.firma, isim: t.isim || KART.isim, tel: t.tel || KART.tel, ilan: t.ilan, yetki: t.yetki } };
