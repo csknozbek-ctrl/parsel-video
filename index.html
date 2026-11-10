@@ -71,6 +71,12 @@
   <input id="satilik" inputmode="numeric" autocomplete="off" placeholder="Örn. 300">
   <label for="elle">Önemli yerler (her satıra bir ad, en fazla 4)</label>
   <textarea id="elle" rows="2" autocomplete="off" placeholder="Sinpaş, Park Oran, Panora"></textarea>
+  <label for="hisseKml">Satılık hisse sınırı: KML dosyası (isteğe bağlı)</label>
+  <input id="hisseKml" type="file" accept=".kml,application/vnd.google-earth.kml+xml">
+  <label for="hisseKoor">…ya da köşe koordinatları (her satıra “enlem, boylam”)</label>
+  <textarea id="hisseKoor" rows="3" autocomplete="off" placeholder="39.9210, 32.8530"></textarea>
+  <label for="yapiIsaret">Yapı işareti (isteğe bağlı): enlem, boylam</label>
+  <input id="yapiIsaret" autocomplete="off" placeholder="Haritadan kopyalanan enlem, boylam">
   <div class="iki">
     <div><label for="bicim">Biçim</label><select id="bicim"><option value="dikey">Dikey (telefon)</option><option value="yatay">Yatay</option></select></div>
     <div><label for="uzunluk">Süre</label><select id="uzunluk"><option value="uzun">Uzun (~45 sn)</option><option value="kisa">Kısa (~25 sn)</option></select></div>
@@ -375,6 +381,12 @@ function sahneDoldur() {
   viewer.entities.add({ polygon: { hierarchy: Cesium.Cartesian3.fromDegreesArray(p.halka.flat()), height: 0.5, material: kirmizi.withAlpha(0.3) } });
   viewer.entities.add({ polyline: { positions: Cesium.Cartesian3.fromDegreesArrayHeights(p.halka.concat([p.halka[0]]).flatMap(q => [q[0], q[1], 1.5])),
     width: S.u * 0.5, material: new Cesium.PolylineOutlineMaterialProperty({ color: kirmizi, outlineColor: Cesium.Color.WHITE, outlineWidth: 2 }) } });
+  if (S.hisse) {   // satılık hisse sınırı: altın dolgu ve çerçeve
+    const altin = Cesium.Color.fromCssColorString("#ffd24a");
+    viewer.entities.add({ polygon: { hierarchy: Cesium.Cartesian3.fromDegreesArray(S.hisse.flat()), height: 0.9, material: altin.withAlpha(0.28) } });
+    viewer.entities.add({ polyline: { positions: Cesium.Cartesian3.fromDegreesArrayHeights(S.hisse.concat([S.hisse[0]]).flatMap(q => [q[0], q[1], 1.2])),
+      width: S.u * 0.5, material: new Cesium.PolylineOutlineMaterialProperty({ color: altin, outlineColor: Cesium.Color.fromCssColorString("#3a2c00"), outlineWidth: 2 }) } });
+  }
   // Şehirden arsaya uzayan çizgi
   if (S.yol) {
     const altin = Cesium.Color.fromCssColorString("#ffd24a");
@@ -548,6 +560,16 @@ function hud(t) {
     ctx.globalAlpha = 1;
   }
 
+  // --- hedef işaret: yapı (işaretlendiyse) ya da satılık hisse ---
+  if (S.hedef && t >= Z.E[0] + 0.8 && eSon < 0.98) {
+    const a = yumusak((t - Z.E[0] - 0.8) / 0.8) * (1 - eSon), c = ekran(S.hedef.lon, S.hedef.lat);
+    if (c && a > 0.02 && c.x > -200 && c.x < W + 200 && c.y > -200 && c.y < H + 200) {
+      ctx.globalAlpha = a; igne(c.x, c.y, "#ffd24a", 1.9 * u);
+      etiket(c.x, c.y, S.yapi ? "Yapı" : "Satılık hisse", S.yapi ? "Satılık hisse üzerinde" : "", "#ffd24a", true, sinir);
+      ctx.globalAlpha = 1;
+    }
+  }
+
   // --- parsel bilgisi (E) ---
   if (t >= Z.E[0] + 0.8 && eSon < 0.98) {
     const a = yumusak((t - Z.E[0] - 0.8) / 0.8) * (1 - eSon), w = dikey ? W - 2 * kenar : 70 * u, h = 25 * u, x = (W - w) / 2, y0 = altSinir - h - 2 * u;
@@ -621,6 +643,26 @@ async function elleYerGetir(p, metin, ilerle) {   // elle yazılan önemli yerle
   return { yerler, atlanan };
 }
 
+function koordCoz(metin) {   // "enlem, boylam" → [boylam, enlem]
+  const k = String(metin || "").trim().match(/^(-?\d{1,2}[.,]\d+)\s*[, ]\s*(\d{1,3}[.,]\d+)$/);
+  return k ? [+k[2].replace(",", "."), +k[1].replace(",", ".")] : null;
+}
+function hisseCoz(kmlMetin, koorMetin) {   // KML'den ya da köşe satırlarından [[boylam, enlem], ...]
+  let h = null;
+  if (kmlMetin) {
+    const belge = new DOMParser().parseFromString(kmlMetin, "application/xml");
+    const c = belge.querySelector("Polygon coordinates");
+    if (c) h = c.textContent.trim().split(/\s+/).map(s => s.split(",").slice(0, 2).map(Number)).filter(q => q.length === 2 && isFinite(q[0]) && isFinite(q[1]));
+  }
+  if (!h || h.length < 3) {
+    const satirlar = String(koorMetin || "").split("\n").map(koordCoz).filter(Boolean);
+    if (satirlar.length >= 3) h = satirlar;
+  }
+  if (!h || h.length < 3) return null;
+  if (h[0][0] === h[h.length - 1][0] && h[0][1] === h[h.length - 1][1]) h = h.slice(0, -1);
+  return h;
+}
+
 /* ---------------- Yapay ses (Azure Speech) ---------------- */
 let sesCtx = null, aktifSesler = [];
 const SES_SESI = "tr-TR-AhmetNeural";
@@ -630,7 +672,7 @@ function seslendirmeSatirlari() {   // her satır: videonun hangi saniyesinde ba
   satir.push({ at: 0.4, metin: `${p.mahalle}, ${p.ada} ada, ${p.parsel} parsel.` });
   if (S.sehir) satir.push({ at: Z.A[0] + 0.3, metin: `${S.sehir.ad} ile arsa arası ${S.yolBilgi ? `arabayla yaklaşık ${S.yolBilgi.dk} dakika` : mesafeSoz(S.sehirM) + " kuş uçuşu"}.` });
   S.yerler.forEach((y, i) => satir.push({ at: Z.D[0] + i * S.adim + 0.15, metin: `${y.ad}, ${mesafeSoz(y.m)}.` }));
-  satir.push({ at: Z.E[0] + 0.9, metin: p.satilik ? `Satılık hisse, ${p.satilik} metrekare.` : "Arsamız burada." });
+  satir.push({ at: Z.E[0] + 0.9, metin: S.yapi ? (p.satilik ? `Yapı burada. Satılık hisse, ${p.satilik} metrekare.` : "Yapı burada.") : p.satilik ? `Satılık hisse, ${p.satilik} metrekare.` : "Arsamız burada." });
   satir.push({ at: Z.F[0] + 0.3, metin: `${S.kart.firma}. ${S.kart.isim}. Telefon: ${S.kart.tel}.` });
   return satir.filter(s => s.metin.replace(/[\s.,:]/g, "").length > 0);
 }
@@ -681,6 +723,9 @@ async function hazirla(a, ilerle = () => { }) {
   const dikey = a.bicim !== "yatay", kisa = a.kalite === 1080 ? 1080 : 720;
   const W = dikey ? kisa : Math.round(kisa * 16 / 9), H = dikey ? Math.round(kisa * 16 / 9) : kisa;
   S = { p, W, H, u: Math.min(W, H) / 100, uzun: a.uzunluk !== "kisa", kart: a.kart || KART, yerler: [] };
+  S.hisse = a.hisse || null;
+  S.yapi = a.yapi ? { lon: a.yapi[0], lat: a.yapi[1] } : null;
+  S.hedef = S.yapi ? { ...S.yapi, ad: "Yapı" } : S.hisse ? (() => { const [la, lo] = alanMerkezi(S.hisse); return { lat: la, lon: lo, ad: "Satılık hisse" }; })() : null;
   ilerle("Başlangıç ve yol bulunuyor…", 0.08);
   S.sehir = await baslangicBul(a.baslangic, p.il);
   if (S.sehir) {
@@ -799,8 +844,13 @@ async function calistir() {
   if (!sesAnahtar) { durum("Seslendirme için yapay ses anahtarını girin (Kartvizit, ses ve kalite bölümünde).", null, true); return; }
   if (!sesCtx) sesCtx = new (window.AudioContext || window.webkitAudioContext)();
   sesCtx.resume().catch(() => { });
+  const kmlDosya = $("hisseKml").files[0], hisseKoor = $("hisseKoor").value, yapiMetin = $("yapiIsaret").value.trim();
+  const hisse = hisseCoz(kmlDosya ? await kmlDosya.text() : "", hisseKoor);
+  if ((kmlDosya || hisseKoor.trim()) && !hisse) { durum("Hisse sınırı okunamadı. KML dosyasını ya da en az 3 koordinat satırını kontrol edin.", null, true); return; }
+  const yapi = yapiMetin ? koordCoz(yapiMetin) : null;
+  if (yapiMetin && !yapi) { durum("Yapı işareti “enlem, boylam” biçiminde olmalı.", null, true); return; }
   const a = { il: sec("il").textContent, ilce: sec("ilce").textContent, mahalle: sec("mah").textContent, mahId: $("mah").value,
-    ada: $("ada").value.trim() || "0", parsel: $("parsel").value.trim(), bicim: $("bicim").value, uzunluk: $("uzunluk").value, kalite: +$("kalite").value, satilik: $("satilik").value.trim(), baslangic: $("baslangic").value.trim(), elle: $("elle").value, kart: kartOku() };
+    ada: $("ada").value.trim() || "0", parsel: $("parsel").value.trim(), bicim: $("bicim").value, uzunluk: $("uzunluk").value, kalite: +$("kalite").value, satilik: $("satilik").value.trim(), baslangic: $("baslangic").value.trim(), elle: $("elle").value, hisse, yapi, kart: kartOku() };
   for (const [k, v] of [["il", a.il], ["ilce", a.ilce], ["mah", a.mahalle], ["bicim", a.bicim], ["uzunluk", a.uzunluk], ["kalite", a.kalite], ["firma", a.kart.firma], ["isim", a.kart.isim], ["tel", a.kart.tel], ["ilan", a.kart.ilan], ["yetki", a.kart.yetki], ["sesAnahtar", sesAnahtar], ["sesBolge", sesBolge]]) sakla.yaz(k, v);
   $("basla").disabled = true; sonVideo = null; $("bIndir").hidden = true; $("bPaylas").hidden = true;
   try {
