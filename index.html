@@ -119,7 +119,7 @@
     <div class="ipucu">Video takılırsa HD 720 seçin.</div>
   </details>
   <div class="ipucu">Ana ekrana eklemek için tarayıcı menüsünden “Ana ekrana ekle”yi seçin.</div>
-  <div class="ipucu" id="surum">Sürüm 24</div>
+  <div class="ipucu" id="surum">Sürüm 25</div>
 </div>
 
 <div id="haritaKutu" hidden style="position:fixed;inset:0;z-index:50;background:#0c1016;display:flex;flex-direction:column">
@@ -1430,8 +1430,11 @@ function talimatCoz(metin) {   // başlık yoksa konum sayılır (ada/parsel ya 
   r.elle = r.elle.slice(0, 30); r.cazibe = r.cazibe.slice(0, 30); r.yol = r.yol.slice(0, 30);
   return r;
 }
+function mahKelimeli(ad, metin) {   // "Çankaya mahallesi" gibi mahalle sözcüğüyle yazılmış ad
+  return !!ad && new RegExp(`(^| )${ad} (mahallesi|mahalle|mah|mh|koyu|koy)( |$)`).test(" " + trSade(metin).replace(/[^a-z0-9 ]+/g, " ") + " ");
+}
 async function konumUygula(t) {   // talimattaki il, ilçe ve mahalle/köyü TKGM listelerinde bulup seçim kutularına yazar
-  const metinler = [t.konum.join(" "), t.tum].filter(v => v.trim());
+  const metinler = [t.konum.join(" ")].filter(v => v.trim());   // yalnızca konum satırları: "Çankaya Belediyesi…" gibi çevre yerleri ilçe ya da mahalle sanılmaz
   const onceki = { ilce: $("ilce").value, mah: $("mah").value };   // talimatta yazılmayan konum ekrandaki seçimden alınır
   const il = yerBul(await tkgmListe("/idariYapi/ilListe"), metinler);
   if (il) $("il").value = il.id;
@@ -1441,7 +1444,8 @@ async function konumUygula(t) {   // talimattaki il, ilçe ve mahalle/köyü TKG
   secenekDoldur($("ilce"), ilceListe, ilce ? ilce.id : onceki.ilce);
   const mahListe = await tkgmListe("/idariYapi/mahalleListe/" + $("ilce").value);
   mahTum = mahListe;
-  const mah = yerBul(mahListe, metinler);
+  const secilenIlce = ilceListe.find(o => String(o.id) === $("ilce").value), ilceAd = secilenIlce ? adSade(secilenIlce.text) : "";
+  const mah = yerBul(mahListe.filter(o => adSade(o.text) !== ilceAd || metinler.some(m => mahKelimeli(ilceAd, m))), metinler);   // ilçeyle aynı adlı mahalle (Çankaya gibi) yalnızca "… mahallesi" diye yazılırsa seçilir
   if (!mah && !mahListe.some(o => String(o.id) === onceki.mah)) return { tamam: false, mesaj: "Mahalle ya da köy seçin ya da talimata adını yazın (örnek: “Kocatepe mahallesi 123 ada 4 parsel”)." };
   secenekDoldur($("mah"), mahListe, mah ? mah.id : onceki.mah);
   if (!$("mah").value) return { tamam: false, mesaj: "Mahalle ya da köy seçilmedi." };
