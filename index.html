@@ -101,7 +101,7 @@
     <div class="ipucu">Video takılırsa HD 720 seçin.</div>
   </details>
   <div class="ipucu">Ana ekrana eklemek için tarayıcı menüsünden “Ana ekrana ekle”yi seçin.</div>
-  <div class="ipucu" id="surum">Sürüm 6</div>
+  <div class="ipucu" id="surum">Sürüm 7</div>
 </div>
 
 <div id="sahne" hidden>
@@ -370,7 +370,7 @@ function yolKes(yol, f) {      // yolun f (0..1) kadarı: {nokta dizisi, uç}
 function planla() {
   const n = S.yerler.length, u = S.uzun, var_ = S.sehir && S.sehirM > 1500;
   const P = { A: var_ ? (u ? 3.5 : 2.2) : 0, B: var_ ? (u ? 9 : 5) : 0, C: u ? 2.5 : 1.6, D: n * (u ? 1.6 : 1.0),
-              O: n ? (u ? 3.5 : 2.4) : 0, E: u ? 7.5 : 5, F: u ? 4.5 : 3.2 };
+              O: n ? (u ? 3.5 : 2.4) : 0, E: u ? 7.5 : 5, F: 2.4 };
   let t = 0; S.Z = {};
   for (const k of "ABCDOEF") { S.Z[k] = [t, t + P[k]]; t += P[k]; }
   S.sure = t; S.adim = u ? 1.6 : 1.0;
@@ -694,7 +694,7 @@ function seslendirmeSatirlari() {   // her satır: videonun hangi saniyesinde ba
   if (S.sehir) satir.push({ at: Z.A[0] + 0.3, metin: `${S.sehir.ad} ile arsa arası ${S.yolBilgi ? `arabayla yaklaşık ${S.yolBilgi.dk} dakika` : mesafeSoz(S.sehirM) + " kuş uçuşu"}.` });
   S.yerler.forEach((y, i) => satir.push({ at: Z.D[0] + i * S.adim + 0.15, metin: `${y.ad}, ${mesafeSoz(y.m)}.` }));
   satir.push({ at: Z.E[0] + 0.9, metin: S.yapi ? (p.satilik ? `Yapı burada. Satılık hisse, ${p.satilik} metrekare.` : "Yapı burada.") : p.satilik ? `Satılık hisse, ${p.satilik} metrekare.` : "Arsamız burada." });
-  satir.push({ at: Z.F[0] + 0.3, metin: `${S.kart.firma}. ${S.kart.isim}. Telefon: ${S.kart.tel}.` });
+  satir.push({ at: Z.F[0] + 0.3, metin: `${S.kart.firma}. ${S.kart.isim}.` });
   return satir.filter(s => s.metin.replace(/[\s.,:]/g, "").length > 0);
 }
 async function azureSes(metin, anahtar, bolge) {
