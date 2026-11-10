@@ -88,7 +88,7 @@
     <button type="button" id="ilanEkle" class="ikincil">İlan bilgilerini talimata ekle</button>
     <label for="ilanGoruntu">İlan açıklaması ekran görüntüleri (metni okur, talimatı doldurur)</label>
     <input type="file" id="ilanGoruntu" accept="image/*" multiple>
-    <label for="fotolar">İlan fotoğrafları (en çok 6)</label>
+    <label for="fotolar">İlan fotoğrafları (en çok 6; yazılı görüntüler de okunur)</label>
     <input type="file" id="fotolar" accept="image/*" multiple>
   </details>
   <details id="konumDetay">
@@ -119,7 +119,7 @@
     <div class="ipucu">Video takılırsa HD 720 seçin.</div>
   </details>
   <div class="ipucu">Ana ekrana eklemek için tarayıcı menüsünden “Ana ekrana ekle”yi seçin.</div>
-  <div class="ipucu" id="surum">Sürüm 22</div>
+  <div class="ipucu" id="surum">Sürüm 23</div>
 </div>
 
 <div id="haritaKutu" hidden style="position:fixed;inset:0;z-index:50;background:#0c1016;display:flex;flex-direction:column">
@@ -558,7 +558,7 @@ function cevreCoz(metin) {   // ilan yazısındaki "Çevre" / "Çevresinde" böl
   }
   return yerler.slice(0, 30);
 }
-let ocrCalisan = null, ocrYukleme = null, ocrSonMetin = "", ocrIlerle = null, ocrIsleniyor = null;   // ekran görüntüsü okuma: OCR motoru ilk kullanımda yüklenir
+let ocrCalisan = null, ocrYukleme = null, ocrIlerle = null, ocrIsleniyor = null;   // ekran görüntüsü okuma: OCR motoru ilk kullanımda yüklenir
 const OCR = {   // Tesseract.js 5.1.1 ve Türkçe dil verisi, cdn.jsdelivr.net üzerinden
   kitaplik: "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js",
   isci: "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/worker.min.js",
@@ -591,34 +591,41 @@ async function ocrGorseli(dosya) {   // görüntüyü OCR için büyütür, griy
   x.putImageData(v, 0, 0);
   return c;
 }
-async function ilanGoruntulerioku() {   // seçilen ekran görüntülerinin metnini okur, ilan kutusuna yazar ve talimata satılık ile çevre yerlerini ekler
-  const dosyalar = [...($("ilanGoruntu").files || [])].slice(0, 8);
-  if (!dosyalar.length) return;
+const ocrOkunan = new Set();   // daha önce okunmuş görüntüler (ad ve boyutuyla); aynı dosya tekrar okunmaz
+let ocrMetni = "";   // okunan tüm görüntülerin metni; ilan kutusunda elle yazılan metinden ayrı tutulur
+const ocrAnahtar = f => f.name + "|" + f.size;
+function ocrBekleyen() {   // iki görüntü alanındaki (ilan açıklaması ve ilan fotoğrafları) henüz okunmamış dosyalar
+  const goruldu = new Set();
+  return [...($("ilanGoruntu").files || []), ...($("fotolar").files || [])].filter(f => {
+    const a = ocrAnahtar(f);
+    if (goruldu.has(a) || ocrOkunan.has(a)) return false;
+    goruldu.add(a); return true;
+  }).slice(0, 10);
+}
+function ilanGoruntulerioku() {   // okunmamış görüntüleri okur; metni ilan kutusuna yazar ve talimata satılık ile çevre yerlerini ekler
+  if (ocrIsleniyor) return ocrIsleniyor;
+  const dosyalar = ocrBekleyen();
+  if (!dosyalar.length) return Promise.resolve();
   $("ilanBolum").open = true;
-  ocrIsleniyor = (async () => {
-    const metinler = [];
-    try {
-      durum("OCR motoru yükleniyor. İlk seferde biraz sürebilir…", 0);
-      const isci = await ocrHazirla();
-      for (let k = 0; k < dosyalar.length; k++) {
-        ocrIlerle = p => durum(`Ekran görüntüsü ${k + 1}/${dosyalar.length} okunuyor…`, (k + (p || 0)) / dosyalar.length);
-        const { data } = await isci.recognize(await ocrGorseli(dosyalar[k]));
-        metinler.push(data.text || "");
-      }
-    } catch (e) {
-      ocrIlerle = null;
-      durum("Ekran görüntüsü okunamadı: " + e.message + " Metni ilan kutusuna elle yapıştırabilirsiniz.", null, true);
-      return;
-    }
-    ocrIlerle = null;
-    const el = $("ilanMetin");
-    if (ocrSonMetin && el.value.includes(ocrSonMetin)) el.value = el.value.replace(ocrSonMetin, "");   // aynı görüntüler yeniden okunursa metin çoğalmaz
-    ocrSonMetin = metinler.join("\n").trim();
-    el.value = [el.value.trim(), ocrSonMetin].filter(Boolean).join("\n");
-    ilanTalimatEkle();
-  })();
-  await ocrIsleniyor;
-  ocrIsleniyor = null;
+  ocrIsleniyor = ocrCalistir(dosyalar).finally(() => { ocrIsleniyor = null; ocrIlerle = null; });
+  return ocrIsleniyor;
+}
+async function ocrCalistir(dosyalar) {   // hata olursa fırlatır; çağıran durumu gösterir
+  const metinler = [];
+  durum("OCR motoru yükleniyor. İlk seferde biraz sürebilir…", 0);
+  const isci = await ocrHazirla();
+  for (let k = 0; k < dosyalar.length; k++) {
+    ocrIlerle = p => durum(`Ekran görüntüsü ${k + 1}/${dosyalar.length} okunuyor…`, (k + (p || 0)) / dosyalar.length);
+    const { data } = await isci.recognize(await ocrGorseli(dosyalar[k]));
+    metinler.push(data.text || "");
+    ocrOkunan.add(ocrAnahtar(dosyalar[k]));
+  }
+  ocrIlerle = null;
+  const el = $("ilanMetin");
+  if (ocrMetni && el.value.includes(ocrMetni)) el.value = el.value.replace(ocrMetni, "");   // önceki okumalar kutuda çoğalmaz
+  ocrMetni = [ocrMetni, ...metinler].filter(Boolean).join("\n").trim();
+  el.value = [el.value.trim(), ocrMetni].filter(Boolean).join("\n");
+  ilanTalimatEkle();
 }
 function ilanTalimatEkle() {   // ilan bilgilerinden talimat satırı üretir; talimatta zaten olan satılık ve çevre yerlerine dokunmaz
   const metin = $("ilanMetin").value, i = ilanCoz(metin), t = talimatCoz($("talimat").value), satirlar = [];
@@ -1476,7 +1483,9 @@ async function formBasla() {
   $("bolgeAc").onclick = bolgeListele;
   $("bolgeEkle").onclick = bolgeEkle;
   $("ilanEkle").onclick = ilanTalimatEkle;
-  $("ilanGoruntu").onchange = ilanGoruntulerioku;
+  const ocrHata = e => durum("Ekran görüntüsü okunamadı: " + e.message + " Metni ilan kutusuna elle yapıştırabilirsiniz.", null, true);
+  $("ilanGoruntu").onchange = () => ilanGoruntulerioku().catch(ocrHata);
+  $("fotolar").onchange = () => ilanGoruntulerioku().catch(ocrHata);   // ilan fotoğrafları da okunur: metin bilgileri (m², fiyat, çevre) buradan da alınır
   $("haritaIptal").onclick = () => { $("haritaKutu").hidden = true; };
   $("haritaTamam").onclick = () => { if (!haritaSecim) return; talimatEkle(`Başlangıç: ${haritaSecim.lat.toFixed(5)}, ${haritaSecim.lng.toFixed(5)}`); $("haritaKutu").hidden = true; };
   $("bOynat").onclick = () => { dugmeKilit(true); oynat(() => dugmeKilit(false)); };
@@ -1489,16 +1498,14 @@ async function formBasla() {
 async function calistir() {
   const sesAnahtar = $("sesAnahtar").value.trim();
   if (!sesAnahtar) { durum("Seslendirme için Google Cloud API anahtarını girin (Kartvizit, ses ve kalite bölümünde).", null, true); return; }
-  if (ocrIsleniyor) await ocrIsleniyor;   // ekran görüntüleri hâlâ okunuyorsa bitmesini bekler
+  try { await ilanGoruntulerioku(); } catch (e) { durum("Ekran görüntüsü okunamadı: " + e.message + " Video üretilmedi.", null, true); return; }   // okunmamış görüntüler önce okunur
   const t = talimatCoz($("talimat").value);
   for (const x of cevreCoz($("ilanMetin").value)) if (!trSade(t.tum).includes(trSade(x)) && t.elle.length < 30) t.elle.push(x);   // ilan açıklamasındaki çevre yerleri talimatta yoksa yine aranır
   sakla.yaz("talimat", $("talimat").value);
-  const eksik = [];   // zorunlu bilgiler yazılmadıysa üretimden önce sorulur
+  const eksik = [];   // talimatta yazılmayanlar üretimi durdurmaz; video bitince bilgi satırında gösterilir
   if (!t.satilik && !ilanCoz($("ilanMetin").value).m2) eksik.push("satılık m²");
   if (!t.ilan) eksik.push("ilan linki");
   if (!t.yetki) eksik.push("yetki belgesi no");
-  if (!t.seslendirme.length) eksik.push("seslendirme cümleleri");
-  if (eksik.length && !confirm(`Talimatta şunlar yazılmamış: ${eksik.join(", ")}.\n\nYine de video üretilsin mi?`)) { durum("Video üretilmedi. Eksik bilgileri talimata yazıp tekrar deneyin."); return; }
   const ada = t.ada || $("ada").value.trim() || "0", parsel = t.parsel || $("parsel").value.trim();
   if (!parsel) { durum("Parsel numarasını yazın. Örnek: “Kocatepe mahallesi 123 ada 4 parsel”.", null, true); $("konumDetay").open = true; return; }
   let konum;
@@ -1530,7 +1537,7 @@ async function calistir() {
     await sesHazirla(sesAnahtar, durum);
     await onYukle(durum);
     $("form").hidden = true; $("sahne").hidden = false;
-    $("bilgi").textContent = `${Math.round(S.sure)} saniyelik video hazır. “Kaydet” videoyu dosyaya çevirir.` + (S.atlanan && S.atlanan.length ? ` Bulunamayan yerler: ${S.atlanan.join(", ")}.` : "") + (S.duzeltmeler && S.duzeltmeler.length ? ` Yazım düzeltildi: ${S.duzeltmeler.join(", ")}.` : "");
+    $("bilgi").textContent = `${Math.round(S.sure)} saniyelik video hazır. “Kaydet” videoyu dosyaya çevirir.` + (S.atlanan && S.atlanan.length ? ` Bulunamayan yerler: ${S.atlanan.join(", ")}.` : "") + (S.duzeltmeler && S.duzeltmeler.length ? ` Yazım düzeltildi: ${S.duzeltmeler.join(", ")}.` : "") + (eksik.length ? ` Talimatta yazılmayanlar: ${eksik.join(", ")}.` : "");
     try { navigator.wakeLock && navigator.wakeLock.request("screen").catch(() => { }); } catch (e) { }
     durum("");
   } catch (e) { durum(e.message || String(e), null, true); }
