@@ -61,13 +61,11 @@
 
   <label for="talimat">Talimat paneli</label>
   <textarea id="talimat" rows="10" autocomplete="off" placeholder="Örnek: Ankara Çankaya Kocatepe mahallesi 123 ada 4 parsel. Simpaş'tan başla. Önemli yerler: Sinpaş, Park Oran, Panora. Cazibe: Ankara Kalesi, Atakule. Yollar: Çevre Yolu. Vurgu: Yatırım fırsatı. Seslendirme: Bu bölge hızla gelişiyor."></textarea>
-  <div class="ipucu">İl, ilçe ve mahalle/köyü kutulardan seçebilir ya da talimata yazabilirsiniz; ada ve parseli talimata “123 ada 4 parsel” diye yazın. “Simpaş'tan başla” yazarsanız video o yerden başlar. Başlıklar isteğe bağlı: <b>Önemli yerler:</b> / <b>Çevre bilgisi:</b> · <b>Cazibe:</b> / <b>AVM:</b> / <b>Alışveriş merkezleri:</b> · <b>Yollar:</b> / <b>Otoyol:</b> · <b>İmar:</b> · <b>Doğa:</b> · <b>Seslendirme:</b> (ek anlatım, okunur) · <b>Vurgu:</b> (ekranda, okunmaz). Başlık yazmazsanız yazdığınız yerler önemli yer sayılır.</div>
+  <div class="ipucu">Tüm talimatları buraya yazın. Başlıklar isteğe bağlı: <b>Satılık:</b> 300 · <b>Yapı:</b> enlem, boylam · <b>Biçim:</b> dikey/yatay · <b>Süre:</b> uzun/kısa · <b>İlan:</b> link · <b>Yetki:</b> numara · <b>Firma / Ad / Tel:</b> kartvizit · <b>Önemli yerler:</b> / <b>Çevre bilgisi:</b> · <b>Cazibe:</b> / <b>Yollar:</b> / <b>Otoyol:</b> · <b>Hastaneler, Parklar, AVM'ler, Okullar, Metro, Camiler, Marketler, Eczaneler:</b> adsız yazarsanız arsaya en yakınları bulunur; adet için “Hastaneler: 3” yazın · <b>İmar:</b> · <b>Doğa:</b> · <b>Seslendirme:</b> (okunur) · <b>Vurgu:</b> (ekranda). Ada ve parseli “123 ada 4 parsel” diye yazın; “Simpaş'tan başla” yazarsanız video o yerden başlar. Video en çok 12 yer gösterir.</div>
   <label for="il">İl</label><select id="il"><option>Yükleniyor…</option></select>
   <label for="ilce">İlçe</label><select id="ilce"></select>
   <label for="mah">Mahalle / köy</label><select id="mah"></select>
   <button type="button" id="haritaAc" class="ikincil">Haritadan başlangıç seç</button>
-  <label for="satilik">Satılık hisse (m²)</label>
-  <input id="satilik" inputmode="numeric" autocomplete="off" placeholder="Örn. 300">
   <details id="konumDetay">
     <summary>Ada ve parsel (talimatta yazılmadıysa)</summary>
     <div class="iki">
@@ -75,28 +73,20 @@
       <div><label for="parsel">Parsel</label><input id="parsel" inputmode="numeric" autocomplete="off"></div>
     </div>
   </details>
-  <label for="hisseKml">Satılık hisse sınırı: KML dosyası (isteğe bağlı)</label>
-  <input id="hisseKml" type="file" accept=".kml,application/vnd.google-earth.kml+xml">
-  <label for="hisseKoor">…ya da köşe koordinatları (her satıra “enlem, boylam”)</label>
-  <textarea id="hisseKoor" rows="3" autocomplete="off" placeholder="39.9210, 32.8530"></textarea>
-  <label for="yapiIsaret">Yapı işareti (isteğe bağlı): enlem, boylam</label>
-  <input id="yapiIsaret" autocomplete="off" placeholder="Haritadan kopyalanan enlem, boylam">
-  <div class="iki">
-    <div><label for="bicim">Biçim</label><select id="bicim"><option value="dikey">Dikey (telefon)</option><option value="yatay">Yatay</option></select></div>
-    <div><label for="uzunluk">Süre</label><select id="uzunluk"><option value="uzun">Uzun (~45 sn)</option><option value="kisa">Kısa (~25 sn)</option></select></div>
-  </div>
+  <details>
+    <summary>Satılık hisse sınırı (isteğe bağlı)</summary>
+    <label for="hisseKml">KML dosyası</label>
+    <input id="hisseKml" type="file" accept=".kml,application/vnd.google-earth.kml+xml">
+    <label for="hisseKoor">…ya da köşe koordinatları (her satıra “enlem, boylam”)</label>
+    <textarea id="hisseKoor" rows="3" autocomplete="off" placeholder="39.9210, 32.8530"></textarea>
+  </details>
 
   <button class="ana" id="basla">Videoyu hazırla</button>
   <div id="durum"></div>
   <div id="cubuk" hidden><i></i></div>
 
   <details>
-    <summary>Kartvizit, ses ve kalite</summary>
-    <label for="kFirma">Firma</label><input id="kFirma">
-    <label for="kIsim">Ad soyad</label><input id="kIsim">
-    <label for="kTel">Telefon</label><input id="kTel" inputmode="tel">
-    <label for="kIlan">Sahibinden.com ilan linki</label><input id="kIlan" inputmode="url" autocomplete="off" placeholder="https://www.sahibinden.com/ilan/...">
-    <label for="kYetki">Yetki belgesi numarası</label><input id="kYetki" autocomplete="off">
+    <summary>Ses ve kalite</summary>
     <label for="sesAnahtar">Google Cloud API anahtarı (Text-to-Speech)</label><input id="sesAnahtar" type="password" autocomplete="off">
     <div class="ipucu">Seslendirme için Google Cloud Text-to-Speech API anahtarı gerekir; anahtar yoksa video hazırlanmaz.</div>
     <label for="kalite">Kalite</label>
@@ -104,7 +94,7 @@
     <div class="ipucu">Video takılırsa HD 720 seçin.</div>
   </details>
   <div class="ipucu">Ana ekrana eklemek için tarayıcı menüsünden “Ana ekrana ekle”yi seçin.</div>
-  <div class="ipucu" id="surum">Sürüm 12</div>
+  <div class="ipucu" id="surum">Sürüm 13</div>
 </div>
 
 <div id="haritaKutu" hidden style="position:fixed;inset:0;z-index:50;background:#0c1016;display:flex;flex-direction:column">
@@ -864,12 +854,18 @@ async function hazirla(a, ilerle = () => { }) {
   const cazibe = await yazilanYerGetir(p, kC.kalan, 4, "cazibe", "Cazibe merkezi", "#7fe3a0", m => ilerle(m, 0.34));
   const yol = await yazilanYerGetir(p, kY.kalan, 4, "yol", "Yol", "#e8edf3", m => ilerle(m, 0.36));
   S.atlanan = [...elle.atlanan, ...cazibe.atlanan, ...yol.atlanan];
+  // talimatta kategori yazıldıysa: adları yazılanlar aranır, adsızlar için arsaya en yakın adlı yerler bulunur
+  const kat = [];
+  for (const k of (a.kategoriler || [])) {
+    if (k.adlar.length) { const g = await yazilanYerGetir(p, k.adlar.join("\n"), 4, "cazibe", k.ad, "#7fe3a0", m => ilerle(m, 0.35)); kat.push(...g.yerler); S.atlanan.push(...g.atlanan); }
+    else { const bulunan = await kategoriAra(p, k, k.sayi || 3, m => ilerle(m, 0.35)); if (!bulunan.length) S.atlanan.push(`${k.ad} (yakında bulunamadı)`); kat.push(...bulunan); }
+  }
   // hiçbir yer yazılmadıysa çevredeki önemli yerleri, cazibe merkezlerini ve yolları kendisi bulur
-  const oto = !kE.kalan.trim() && !kC.kalan.trim() && !kY.kalan.trim()
+  const oto = !kE.kalan.trim() && !kC.kalan.trim() && !kY.kalan.trim() && !(a.kategoriler || []).length
     ? [...(await cevreYerler(p.lat, p.lon, 5, m => ilerle(m, 0.37))), ...(await cazibeMerkezleri(p.lat, p.lon, 10000, 5, m => ilerle(m, 0.38))), ...(await yollar(p.lat, p.lon, m => ilerle(m, 0.39)))]
     : [];
   S.metin = { imar: (a.imar || "").trim().slice(0, 500), doga: (a.doga || "").trim().slice(0, 500) };
-  S.yerler = [...elle.yerler, ...cazibe.yerler, ...yol.yerler, ...oto].map((y, i) => ({ ...y, no: i + 1, mesafe: mesafeYazi(y.m) }));
+  S.yerler = [...elle.yerler, ...cazibe.yerler, ...yol.yerler, ...kat, ...oto].slice(0, 12).map((y, i) => ({ ...y, no: i + 1, mesafe: mesafeYazi(y.m) }));
   const enUzak = Math.max(900, ...S.yerler.map(y => y.m));
   S.genis = sinirla(Math.max(enUzak * (dikey ? 3.0 : 2.3), p.cap * 4), 1200, 32000);
   S.yakin = Math.min(Math.max(p.cap * (dikey ? 2.6 : 1.8), 300), S.genis);
@@ -946,12 +942,54 @@ function secenekDoldur(sel, liste, secili) {
 let mahTum = [];
 async function ilceYukle(secili) { secenekDoldur($("ilce"), await tkgmListe("/idariYapi/ilceListe/" + $("il").value), secili); await mahYukle(); }
 async function mahYukle(secili) { mahTum = await tkgmListe("/idariYapi/mahalleListe/" + $("ilce").value); secenekDoldur($("mah"), mahTum, secili); }
-const kartOku = () => ({ firma: $("kFirma").value.trim(), isim: $("kIsim").value.trim(), tel: $("kTel").value.trim(), ilan: $("kIlan").value.trim(), yetki: $("kYetki").value.trim() });
+const TEK_DEGER = ["satilik", "yapi", "bicim", "sure", "ilan", "yetki", "firma", "isim", "tel"];   // bir satırlık başlıklar
+const KATEGORI = [   // talimatta adsız yazılan kategoriler → OpenStreetMap filtresi (adsız yerler atlanır)
+  { kelimeler: ["hastaneler", "hastane", "sağlık merkezleri", "sağlık merkezi", "klinikler", "klinik"], ad: "Hastane", filtre: `["amenity"~"^(hospital|clinic)$"]` },
+  { kelimeler: ["okullar", "okul", "üniversiteler", "üniversite"], ad: "Okul", filtre: `["amenity"~"^(school|university)$"]` },
+  { kelimeler: ["parklar", "park", "millet bahçeleri", "millet bahçesi"], ad: "Park", filtre: `["leisure"~"^(park|nature_reserve|garden)$"]` },
+  { kelimeler: ["avm'ler", "avm’ler", "avmler", "avm", "alışveriş merkezleri", "alışveriş merkezi", "alisveris merkezleri", "alisveris merkezi"], ad: "AVM", filtre: `["shop"="mall"]` },
+  { kelimeler: ["marketler", "market"], ad: "Market", filtre: `["shop"="supermarket"]` },
+  { kelimeler: ["camiler", "cami"], ad: "Cami", filtre: `["amenity"="place_of_worship"]["religion"="muslim"]` },
+  { kelimeler: ["eczaneler", "eczane"], ad: "Eczane", filtre: `["amenity"="pharmacy"]` },
+  { kelimeler: ["metrolar", "metro", "tren istasyonları", "tren istasyonu"], ad: "Metro", filtre: `["railway"="station"]` },
+  { kelimeler: ["benzinlikler", "benzinlik"], ad: "Benzinlik", filtre: `["amenity"="fuel"]` },
+  { kelimeler: ["havalimanları", "havalimanı"], ad: "Havalimanı", filtre: `["aeroway"="aerodrome"]` },
+].map((k, i) => ({ ...k, anahtar: String(i), re: new RegExp("^(" + k.kelimeler.slice().sort((x, y) => y.length - x.length).map(x => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|") + ")(?=\\s*:|\\s*$|\\s+\\d)") }));
+function kategoriBaslik(kucuk) {   // "Hastaneler: 3", "Parklar" gibi başlıklar: kategori ve başlık uzunluğu
+  for (const k of KATEGORI) { const m = kucuk.match(k.re); if (m) return { k, uzunluk: m[0].length }; }
+  return null;
+}
+async function kategoriAra(p, k, sayi, ilerle) {   // adı yazılmayan kategori: arsaya en yakın adlı yerler (OpenStreetMap)
+  ilerle(`${k.ad} aranıyor…`);
+  const ham = await overpass(`[out:json][timeout:15];(nwr(around:8000,${p.lat},${p.lon})${k.filtre}["name"];);out center tags;`, 16000);
+  if (!ham) return [];
+  const adaylar = ham.map(e => { const [la, lo] = elKonum(e); return { ad: e.tags && e.tags.name, lat: la, lon: lo }; })
+    .filter(x => x.ad && isFinite(x.lat) && isFinite(x.lon))
+    .map(x => ({ ...x, m: mesafeM(p.lat, p.lon, x.lat, x.lon) }))
+    .sort((x, y) => x.m - y.m);
+  const gorulen = new Set(), secilen = [];
+  for (const x of adaylar) {
+    const anahtar = trSade(x.ad);
+    if (gorulen.has(anahtar)) continue;
+    gorulen.add(anahtar); secilen.push(x);
+    if (secilen.length >= sayi) break;
+  }
+  return secilen.map(x => ({ ad: x.ad, tur: "cazibe", lat: x.lat, lon: x.lon, m: x.m, kategori: k.ad, renk: "#7fe3a0", grup: "cazibe" }));
+}
 
 /* ---------------- Talimat paneli: yazılanı bölümlere ayırır ---------------- */
 const TALIMAT_BOLUM = [   // başlık (küçük harf) → bölüm adı
   ["baslangic", /^(başlangıç noktası|başlangıç|baslangic)(?=[\s:\-–]|$)/],
   ["konum", /^(konum|adres)(?=[\s:\-–]|$)/],
+  ["satilik", /^(satılık hisse|satılık|satilik hisse|satilik)(?=[\s:\-–]|$)/],
+  ["yapi", /^(yapı işareti|yapı|yapi)(?=[\s:\-–]|$)/],
+  ["bicim", /^(biçim|bicim)(?=[\s:\-–]|$)/],
+  ["sure", /^(süre|sure)(?=[\s:\-–]|$)/],
+  ["ilan", /^(sahibinden ilan|ilan linki|ilan)(?=[\s:\-–]|$)/],
+  ["yetki", /^(yetki belgesi numarası|yetki belgesi|yetki)(?=[\s:\-–]|$)/],
+  ["firma", /^(firma)(?=[\s:\-–]|$)/],
+  ["isim", /^(ad soyad|isim|ad)(?=[\s:\-–]|$)/],
+  ["tel", /^(telefon|tel)(?=[\s:\-–]|$)/],
   ["yol", /^(otoyol[a-zçğıöşü]*|ana yollar|ana yol|çevre yolu[a-zçğıöşü]*|cevre yolu[a-zçğıöşü]*|yollar|yol)(?=[\s:\-–]|$)/],
   ["cazibe", /^(cazibe merkezleri|cazibe merkezi|cazibe|avm(?:['’]?[a-zçğıöşü]+)?|alışveriş merkezleri|alışveriş merkezi|alisveris merkezleri|alisveris merkezi)(?=[\s:\-–]|$)/],
   ["elle", /^(önemli yerler|önemli yer|önemli|onemli yerler|onemli yer|onemli|çevre bilgisi|cevre bilgisi|çevre|cevre)(?=[\s:\-–]|$)/],
@@ -989,7 +1027,7 @@ function yerBul(liste, metinler) {   // metinlerde (önce konum satırları) ge�
   return null;
 }
 function talimatCoz(metin) {   // başlık yoksa konum sayılır (ada/parsel ya da mahalle sözcüğü), yoksa önemli yer
-  const r = { tum: String(metin || ""), konum: [], ada: "", parsel: "", baslangic: "", elle: [], cazibe: [], yol: [], imar: "", doga: "", seslendirme: [], vurgu: [] };
+  const r = { tum: String(metin || ""), konum: [], ada: "", parsel: "", baslangic: "", elle: [], cazibe: [], yol: [], imar: "", doga: "", seslendirme: [], vurgu: [], kategoriler: [], satilik: "", yapi: null, bicim: "", sure: "", ilan: "", yetki: "", firma: "", isim: "", tel: "" };
   const konumIsle = s => { const v = adaParsel(s); if (v.ada) r.ada = v.ada; if (v.parsel) r.parsel = v.parsel; r.konum.push(s); };
   const listeIsle = (bolum, s) => {
     for (const x of s.split(/[,\n]|\s+ve\s+/).map(v => v.trim()).filter(Boolean)) {
@@ -1004,11 +1042,34 @@ function talimatCoz(metin) {   // başlık yoksa konum sayılır (ada/parsel ya 
     for (const parca of satir.split(/[.!?;]+(?:\s+|$)/).map(v => v.trim()).filter(Boolean)) {
       const kucuk = parca.toLocaleLowerCase("tr-TR");
       let bl = bolum, icerik = parca;
-      for (const [ad, re] of TALIMAT_BOLUM) {
+      const kb = kategoriBaslik(kucuk);
+      if (kb) {
+        bl = bolum = "kat:" + kb.k.anahtar; icerik = parca.slice(kb.uzunluk).replace(/^[\s:\-–]+/, "").trim();
+        if (!r.kategoriler.some(x => x.anahtar === kb.k.anahtar)) r.kategoriler.push({ anahtar: kb.k.anahtar, ad: kb.k.ad, filtre: kb.k.filtre, sayi: 3, adlar: [] });
+      } else for (const [ad, re] of TALIMAT_BOLUM) {
         const m = kucuk.match(re);
         if (m) { bl = bolum = ad; icerik = parca.slice(m[0].length).replace(/^[\s:\-–]+/, "").trim(); break; }
       }
       if (!icerik) continue;
+      if (TEK_DEGER.includes(bl)) {   // bir satırlık başlıklar: değer alınır, sonraki cümle bölüme dönmez
+        if (bl === "satilik") { const n = icerik.match(/\d[\d.]*/); r.satilik = n ? n[0].replace(/\./g, "") : ""; }
+        else if (bl === "yapi") r.yapi = koordCoz(icerik);
+        else if (bl === "bicim") r.bicim = icerik.toLocaleLowerCase("tr-TR").includes("yatay") ? "yatay" : "dikey";
+        else if (bl === "sure") r.sure = /kısa|kisa/.test(icerik.toLocaleLowerCase("tr-TR")) ? "kisa" : "uzun";
+        else if (bl === "ilan") r.ilan = (icerik.match(/https?:\/\/\S+/) || [""])[0];
+        else if (bl === "yetki") r.yetki = icerik.slice(0, 40);
+        else if (bl === "firma") r.firma = icerik.slice(0, 60);
+        else if (bl === "isim") r.isim = icerik.slice(0, 60);
+        else if (bl === "tel") r.tel = icerik.slice(0, 30);
+        bolum = null; continue;
+      }
+      if (bl && bl.startsWith("kat:")) {   // kategori: "Hastaneler: 3" adet, "Hastaneler: Numune, X" adlar
+        const k = r.kategoriler.find(x => x.anahtar === bl.slice(4));
+        const sayi = icerik.match(/^(\d{1,2})(?!\d)/);
+        if (sayi && icerik.length <= 12) k.sayi = Math.min(+sayi[1], 4);
+        else for (const x of icerik.split(/[,\n]|\s+ve\s+/).map(v => v.trim()).filter(Boolean)) if (k.adlar.length < 4) k.adlar.push(x);
+        continue;
+      }
       if (bl === "imar" || bl === "doga") r[bl] = `${r[bl]} ${icerik}${/[.!?]$/.test(icerik) ? "" : "."}`.trim().slice(0, 500);
       else if (bl === "seslendirme") { if (r.seslendirme.length < 8) r.seslendirme.push(icerik.slice(0, 220)); }
       else if (bl === "vurgu") { for (const v of icerik.split(",")) if (v.trim() && r.vurgu.length < 4) r.vurgu.push(v.trim().slice(0, 60)); }
@@ -1048,10 +1109,9 @@ function talimatEkle(satir) {   // haritadan seçilen başlangıcı talimat pane
 
 async function formBasla() {
   const q = new URLSearchParams(location.search);
-  $("kFirma").value = sakla.oku("firma", KART.firma); $("kIsim").value = sakla.oku("isim", KART.isim); $("kTel").value = sakla.oku("tel", KART.tel);
-  $("kIlan").value = sakla.oku("ilan", ""); $("kYetki").value = sakla.oku("yetki", ""); $("sesAnahtar").value = sakla.oku("sesAnahtar", "");
-  $("formMarka").textContent = $("kFirma").value;
-  $("bicim").value = q.get("bicim") || sakla.oku("bicim", "dikey"); $("uzunluk").value = q.get("sure") || sakla.oku("uzunluk", "uzun"); $("kalite").value = sakla.oku("kalite", "720");
+  $("sesAnahtar").value = sakla.oku("sesAnahtar", "");
+  $("formMarka").textContent = KART.firma;
+  $("kalite").value = sakla.oku("kalite", "720");
   $("ada").value = q.get("ada") || ""; $("parsel").value = q.get("parsel") || "";
   $("talimat").value = q.get("talimat") || sakla.oku("talimat", "");
   try {
@@ -1088,15 +1148,14 @@ async function calistir() {
   durum(`Konum: ${konum.il} / ${konum.ilce} / ${konum.mah} · ${ada} ada ${parsel} parsel`);
   if (!sesCtx) sesCtx = new (window.AudioContext || window.webkitAudioContext)();
   sesCtx.resume().catch(() => { });
-  const kmlDosya = $("hisseKml").files[0], hisseKoor = $("hisseKoor").value, yapiMetin = $("yapiIsaret").value.trim();
+  const kmlDosya = $("hisseKml").files[0], hisseKoor = $("hisseKoor").value;
   const hisse = hisseCoz(kmlDosya ? await kmlDosya.text() : "", hisseKoor);
   if ((kmlDosya || hisseKoor.trim()) && !hisse) { durum("Hisse sınırı okunamadı. KML dosyasını ya da en az 3 koordinat satırını kontrol edin.", null, true); return; }
-  const yapi = yapiMetin ? koordCoz(yapiMetin) : null;
-  if (yapiMetin && !yapi) { durum("Yapı işareti “enlem, boylam” biçiminde olmalı.", null, true); return; }
   const a = { il: konum.il, ilce: konum.ilce, mahalle: konum.mah, mahId: $("mah").value,
-    ada, parsel, bicim: $("bicim").value, uzunluk: $("uzunluk").value, kalite: +$("kalite").value, satilik: $("satilik").value.trim(),
+    ada, parsel, bicim: t.bicim || "dikey", uzunluk: t.sure || "uzun", kalite: +$("kalite").value, satilik: t.satilik,
     baslangic: t.baslangic, elle: t.elle.join("\n"), cazibe: t.cazibe.join("\n"), yol: t.yol.join("\n"), imar: t.imar, doga: t.doga,
-    seslendirme: t.seslendirme, vurgu: t.vurgu, hisse, yapi, kart: kartOku() };
+    seslendirme: t.seslendirme, vurgu: t.vurgu, kategoriler: t.kategoriler, hisse, yapi: t.yapi,
+    kart: { firma: t.firma || KART.firma, isim: t.isim || KART.isim, tel: t.tel || KART.tel, ilan: t.ilan, yetki: t.yetki } };
   for (const [k, v] of [["il", a.il], ["ilce", a.ilce], ["mah", a.mahalle], ["bicim", a.bicim], ["uzunluk", a.uzunluk], ["kalite", a.kalite], ["firma", a.kart.firma], ["isim", a.kart.isim], ["tel", a.kart.tel], ["ilan", a.kart.ilan], ["yetki", a.kart.yetki], ["sesAnahtar", sesAnahtar]]) sakla.yaz(k, v);
   $("basla").disabled = true; sonVideo = null; $("bIndir").hidden = true; $("bPaylas").hidden = true;
   try {
