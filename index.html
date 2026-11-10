@@ -94,7 +94,7 @@
     <div class="ipucu">Video takılırsa HD 720 seçin.</div>
   </details>
   <div class="ipucu">Ana ekrana eklemek için tarayıcı menüsünden “Ana ekrana ekle”yi seçin.</div>
-  <div class="ipucu" id="surum">Sürüm 15</div>
+  <div class="ipucu" id="surum">Sürüm 16</div>
 </div>
 
 <div id="haritaKutu" hidden style="position:fixed;inset:0;z-index:50;background:#0c1016;display:flex;flex-direction:column">
@@ -475,6 +475,7 @@ function metinSatirlari(metin, enCok, fs) {   // paragrafları kelimelere göre 
   }
   return satirlar;
 }
+const MUZIK_KREDI = "Müzik: Fresh Lift – Shane Ivers (CC BY 4.0)";   // CC BY şartı: parça adı, sanatçı ve lisans her videoda görünür
 function hud(t) {
   const W = S.W, H = S.H, u = S.u, p = S.p, Z = S.Z, dikey = H > W, k = S.kart;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -649,6 +650,10 @@ function hud(t) {
     if (altSatir) { yaz(2.8 * u, 600); ctx.fillStyle = "#3c4653"; ctx.fillText(sigdir(altSatir, w - 6 * u), W / 2, y0 + 51.5 * u); }
     ctx.textAlign = "left"; ctx.globalAlpha = 1;
   }
+
+  // --- müzik kredisi: çok küçük, sağ alt köşede, kaynak satırının üstünde ---
+  yaz(1.5 * u, 500); ctx.textAlign = "right"; ctx.fillStyle = "rgba(255,255,255,.7)";
+  ctx.fillText(MUZIK_KREDI, W - 2 * u, H - 5.4 * u); ctx.textAlign = "left";
 
   // --- kaynak satırı ---
   yaz(1.9 * u, 500); ctx.textAlign = "center"; ctx.fillStyle = "rgba(0,0,0,.55)"; ctx.fillRect(0, H - 3.6 * u, W, 3.6 * u);
@@ -843,10 +848,33 @@ async function sesHazirla(anahtar, ilerle) {
   S.sesler = sesler;
 }
 function sesDur() { for (const k of aktifSesler) { try { k.stop(); } catch (e) { } } aktifSesler = []; }
-function sesBaslat(hedefler) {   // video zamanına göre sesleri planlar
+let muzikBuf = null;   // arka plan müziği (döngülü); yüklenemezse video müziksiz hazırlanır
+const MUZIK_DOSYA = "muzik/fresh-lift-m23.mp3", MUZIK_SEV = 0.7, MUZIK_KISIK = 0.3;   // -23 LUFS dosya; seslendirmede sese yer açmak için kısılır
+async function muzikYukle() {
+  try {
+    const yanit = await fetch(MUZIK_DOSYA);
+    if (!yanit.ok) return null;
+    return await sesCtx.decodeAudioData(await yanit.arrayBuffer());
+  } catch (e) { return null; }
+}
+function sesBaslat(hedefler) {   // video zamanına göre sesleri ve müziği planlar
   sesDur();
   if (!sesCtx || !S.sesler) return;
   const bas = sesCtx.currentTime + 0.1;
+  if (muzikBuf) {
+    const mk = sesCtx.createBufferSource(), kazanc = sesCtx.createGain();
+    mk.buffer = muzikBuf; mk.loop = true;
+    kazanc.gain.setValueAtTime(MUZIK_SEV, bas);
+    for (const s of S.sesler) {   // her seslendirme cümlesinde müzik yumuşakça kısılır, bitince geri açılır
+      const b = bas + s.at, son = b + s.buf.duration;
+      kazanc.gain.linearRampToValueAtTime(MUZIK_KISIK, b + 0.3);
+      kazanc.gain.setValueAtTime(MUZIK_KISIK, son);
+      kazanc.gain.linearRampToValueAtTime(MUZIK_SEV, son + 0.6);
+    }
+    mk.connect(kazanc);
+    for (const h of hedefler) kazanc.connect(h);
+    mk.start(bas); aktifSesler.push(mk);
+  }
   for (const s of S.sesler) {
     const k = sesCtx.createBufferSource();
     k.buffer = s.buf;
@@ -1213,6 +1241,7 @@ async function calistir() {
   $("basla").disabled = true; sonVideo = null; $("bIndir").hidden = true; $("bPaylas").hidden = true;
   try {
     await Promise.all(["800", "700", "600"].map(w => document.fonts.load(`${w} 40px Inter`))).catch(() => { });
+    muzikBuf = await muzikYukle();
     await hazirla(a, durum);
     await sesHazirla(sesAnahtar, durum);
     await onYukle(durum);
