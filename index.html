@@ -119,7 +119,7 @@
   <div style="padding:10px 12px;display:flex;align-items:center;justify-content:space-between;color:#fff;font-weight:700">
     <span>Başlangıç noktasına dokunun</span><button type="button" id="haritaIptal" style="width:auto;padding:8px 14px">Kapat</button>
   </div>
-  <div id="harita" style="flex:1;min-height:60vh"></div>
+  <div id="haritaSec" style="flex:1;min-height:60vh"></div>
   <div style="padding:10px 12px"><button type="button" id="haritaTamam" class="ana" disabled>Bu noktayı seç</button></div>
 </div>
 <div id="sahne" hidden>
@@ -696,7 +696,7 @@ function haritaAc() {
   if (!window.L) { durum("Harita yüklenemedi. İnternet bağlantınızı kontrol edin ya da başlangıç noktasını yazın.", null, true); return; }
   $("haritaKutu").hidden = false;
   if (!haritaNesne) {
-    haritaNesne = L.map("harita").setView([39.93, 32.86], 11);
+    haritaNesne = L.map("haritaSec").setView([39.93, 32.86], 11);
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(haritaNesne);
     haritaNesne.on("click", e => {
       haritaSecim = e.latlng;
