@@ -94,7 +94,7 @@
     <div class="ipucu">Video takılırsa HD 720 seçin.</div>
   </details>
   <div class="ipucu">Ana ekrana eklemek için tarayıcı menüsünden “Ana ekrana ekle”yi seçin.</div>
-  <div class="ipucu" id="surum">Sürüm 14</div>
+  <div class="ipucu" id="surum">Sürüm 15</div>
 </div>
 
 <div id="haritaKutu" hidden style="position:fixed;inset:0;z-index:50;background:#0c1016;display:flex;flex-direction:column">
@@ -712,16 +712,40 @@ async function baslangicBul(metin, il) {   // boşsa il merkezi; "enlem, boylam"
   if (!d) throw new Error(`Başlangıç noktası bulunamadı: “${s}”. Yer adını değiştirin ya da enlem, boylam yazın.`);
   return { ad: s, alt: s, etiket: s, lat: +d.lat, lon: +d.lon };
 }
+const YOL_ISIM = /\b(yol|yolu|yollar|otoyol|otoyolu|bulvar|bulvari|cadde|caddesi)\b/;   // yol adı: "Çevre yolu", "Ankara-İzmir Otoyolu"
+const GENEL_YOL = ["cevre yolu", "cevre yollari", "otoyol", "otoyollar", "ana yol", "ana yollar", "yollar", "yol"];   // adsız yol sözleri: arsaya en yakın yol bulunur
+async function adlaOverpass(p, ad, yolMu) {   // OpenStreetMap'te adı geçen en yakın yer ya da yol (25 km içinde)
+  const re = ad.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/"/g, '\\"');
+  const ham = await overpass(`[out:json][timeout:15];(nwr(around:25000,${p.lat},${p.lon})["name"~"${re}",i];${yolMu ? `way(around:25000,${p.lat},${p.lon})["highway"]["name"~"${re}",i];` : ""});out geom tags;`, 16000);
+  if (!ham) return null;
+  let en = null;
+  for (const el of ham) {   // yollarda arsaya en yakın nokta alınır
+    const noktalar = el.geometry ? el.geometry.map(g => [g.lat, g.lon]) : [elKonum(el)];
+    for (const [la, lo] of noktalar) {
+      if (!isFinite(la) || !isFinite(lo)) continue;
+      const m = mesafeM(p.lat, p.lon, la, lo);
+      if (!en || m < en.m) en = { ad: (el.tags && el.tags.name) || ad, lat: la, lon: lo, m };
+    }
+  }
+  return en;
+}
+async function nominatimYer(p, ad) {   // Nominatim: önce ilçe içinde, olmazsa il genelinde
+  let d = (await nomi({ q: `${ad} ${p.ilce || ""}`.trim(), viewbox: kutu(p.lat, p.lon, 15000), bounded: 1, limit: 1 }))[0];
+  if (!d) d = (await nomi({ q: `${ad} ${p.il || ""}`.trim(), limit: 1 }))[0];
+  if (!d) return null;
+  return { ad, lat: +d.lat, lon: +d.lon, m: mesafeM(p.lat, p.lon, +d.lat, +d.lon) };
+}
 async function yazilanYerGetir(p, metin, enCok, grup, kategori, renk, ilerle) {   // yazılan yerler; arsaya 25 km'den uzakta olanlar atlanır
   const liste = String(metin || "").split(/[\n,]+/).map(s => s.trim()).filter(Boolean).slice(0, enCok);
   const yerler = [], atlanan = [];
   for (const ad of liste) {
     ilerle(`“${ad}” aranıyor…`);
-    let d = (await nomi({ q: `${ad} ${p.ilce || ""}`.trim(), viewbox: kutu(p.lat, p.lon, 15000), bounded: 1, limit: 1 }))[0];
-    if (!d) d = (await nomi({ q: `${ad} ${p.il || ""}`.trim(), limit: 1 }))[0];
-    const m = d ? mesafeM(p.lat, p.lon, +d.lat, +d.lon) : Infinity;
-    if (!d || m > 25000) { atlanan.push(ad); continue; }
-    yerler.push({ ad, tur: grup, lat: +d.lat, lon: +d.lon, m, kategori, renk, grup });
+    const yolMu = YOL_ISIM.test(trSade(ad));   // yol adları önce OpenStreetMap'te en yakın noktaya göre aranır
+    let d = yolMu ? await adlaOverpass(p, ad, true) : null;
+    if (!d) d = await nominatimYer(p, ad);
+    if (!d) d = await adlaOverpass(p, ad, false);   // Nominatim bulamazsa OpenStreetMap'e bakılır
+    if (!d || d.m > 25000) { atlanan.push(ad); continue; }
+    yerler.push({ ad, tur: grup, lat: d.lat, lon: d.lon, m: d.m, kategori, renk, grup });
   }
   return { yerler, atlanan };
 }
@@ -854,9 +878,19 @@ async function hazirla(a, ilerle = () => { }) {
     if (S.sehirM > 1500) S.yol = yolHazirla(nokta);
     S.yon = yon(S.sehir.lat, S.sehir.lon, p.lat, p.lon);
   } else S.yon = -25;
-  const elle = await yazilanYerGetir(p, kE.kalan, 4, "sizin", "Önemli yer", "#ffcf3f", m => ilerle(m, 0.32));
-  const cazibe = await yazilanYerGetir(p, kC.kalan, 4, "cazibe", "Cazibe merkezi", "#7fe3a0", m => ilerle(m, 0.34));
-  const yol = await yazilanYerGetir(p, kY.kalan, 4, "yol", "Yol", "#e8edf3", m => ilerle(m, 0.36));
+  const elle = await yazilanYerGetir(p, kE.kalan, 8, "sizin", "Önemli yer", "#ffcf3f", m => ilerle(m, 0.32));
+  const cazibe = await yazilanYerGetir(p, kC.kalan, 8, "cazibe", "Cazibe merkezi", "#7fe3a0", m => ilerle(m, 0.34));
+  // yol bölümü: "Çevre yolu", "Otoyol", "Yollar" gibi adsız sözler arsaya en yakın yolu bulur; diğer yol adları adıyla aranır
+  const yolSatirlari = kY.kalan.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+  const genelYol = yolSatirlari.filter(s => GENEL_YOL.includes(trSade(s)));
+  const yol = await yazilanYerGetir(p, yolSatirlari.filter(s => !GENEL_YOL.includes(trSade(s))).join("\n"), 8, "yol", "Yol", "#e8edf3", m => ilerle(m, 0.36));
+  if (genelYol.length) {
+    const hepsi = await yollar(p.lat, p.lon, m => ilerle(m, 0.36));
+    const cevreIste = genelYol.some(s => trSade(s).startsWith("cevre")) || genelYol.some(s => ["yol", "yollar"].includes(trSade(s)));
+    const anaIste = genelYol.some(s => !trSade(s).startsWith("cevre"));
+    const secilen = hepsi.filter(y => (cevreIste && y.kategori === "Çevre yolu") || (anaIste && y.kategori === "Ana yol"));
+    if (secilen.length) yol.yerler.push(...secilen); else yol.atlanan.push(...genelYol);
+  }
   S.atlanan = [...elle.atlanan, ...cazibe.atlanan, ...yol.atlanan];
   // talimatta kategori yazıldıysa: adları yazılanlar aranır, adsızlar için arsaya en yakın adlı yerler bulunur
   const kat = [];
@@ -869,7 +903,10 @@ async function hazirla(a, ilerle = () => { }) {
     ? [...(await cevreYerler(p.lat, p.lon, 5, m => ilerle(m, 0.37))), ...(await cazibeMerkezleri(p.lat, p.lon, 10000, 5, m => ilerle(m, 0.38))), ...(await yollar(p.lat, p.lon, m => ilerle(m, 0.39)))]
     : [];
   S.metin = { imar: (a.imar || "").trim().slice(0, 500), doga: (a.doga || "").trim().slice(0, 500) };
-  S.yerler = [...elle.yerler, ...cazibe.yerler, ...yol.yerler, ...kat, ...oto].slice(0, 12).map((y, i) => ({ ...y, no: i + 1, mesafe: mesafeYazi(y.m) }));
+  const gorulen = new Set(), tekil = [...elle.yerler, ...cazibe.yerler, ...yol.yerler, ...kat, ...oto].filter(y => { const k = trSade(y.ad); if (gorulen.has(k)) return false; gorulen.add(k); return true; });   // aynı yer iki kez yazılmasın
+  S.atlanan = S.atlanan.filter(s => !gorulen.has(trSade(s)));   // başka yoldan bulunan yerler "bulunamadı" listesinde kalmasın
+  S.yerler = tekil.slice(0, 16).map((y, i) => ({ ...y, no: i + 1, mesafe: mesafeYazi(y.m) }));
+  S.atlanan.push(...tekil.slice(16).map(y => `${y.ad} (en çok 16 yer)`));
   const enUzak = Math.max(900, ...S.yerler.map(y => y.m));
   S.genis = sinirla(Math.max(enUzak * (dikey ? 3.0 : 2.3), p.cap * 4), 1200, 32000);
   S.yakin = Math.min(Math.max(p.cap * (dikey ? 2.6 : 1.8), 300), S.genis);
@@ -958,6 +995,10 @@ const KATEGORI = [   // talimatta adsız yazılan kategoriler → OpenStreetMap 
   { kelimeler: ["metrolar", "metro", "tren istasyonları", "tren istasyonu"], ad: "Metro", filtre: `["railway"="station"]` },
   { kelimeler: ["benzinlikler", "benzinlik"], ad: "Benzinlik", filtre: `["amenity"="fuel"]` },
   { kelimeler: ["havalimanları", "havalimanı"], ad: "Havalimanı", filtre: `["aeroway"="aerodrome"]` },
+  { kelimeler: ["konut projeleri", "konut projesi", "konutlar", "siteler", "site projeleri"], ad: "Konut projesi", filtreler: [`["name"~"konut|rezidans|residence|villa|evler|konak",i]`, `["landuse"="residential"]["name"]`] },
+  { kelimeler: ["ormanlar", "orman", "ormanlık alan", "ormanlık"], ad: "Orman", filtreler: [`["landuse"="forest"]`, `["natural"="wood"]`], adsizOlur: true },
+  { kelimeler: ["vadiler", "vadi"], ad: "Vadi", filtreler: [`["natural"="valley"]`, `["name"~"vadi",i]`] },
+  { kelimeler: ["göller", "göl"], ad: "Göl", filtreler: [`["natural"="water"]["water"~"^(lake|reservoir|pond)$"]`, `["natural"="water"]["name"~"göl",i]`] },
 ].map((k, i) => ({ ...k, anahtar: String(i), re: new RegExp("^(" + k.kelimeler.slice().sort((x, y) => y.length - x.length).map(x => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|") + ")(?=\\s*:|\\s*$|\\s+\\d)") }));
 function kategoriBaslik(kucuk) {   // "Hastaneler: 3", "Parklar" gibi başlıklar: kategori ve başlık uzunluğu
   for (const k of KATEGORI) { const m = kucuk.match(k.re); if (m) return { k, uzunluk: m[0].length }; }
@@ -965,10 +1006,12 @@ function kategoriBaslik(kucuk) {   // "Hastaneler: 3", "Parklar" gibi başlıkla
 }
 async function kategoriAra(p, k, sayi, ilerle) {   // adı yazılmayan kategori: arsaya en yakın adlı yerler (OpenStreetMap)
   ilerle(`${k.ad} aranıyor…`);
-  const ham = await overpass(`[out:json][timeout:15];(nwr(around:8000,${p.lat},${p.lon})${k.filtre}["name"];);out center tags;`, 16000);
+  const filtreler = k.filtreler || [k.filtre || ""];
+  const sorgu = filtreler.map(f => `nwr(around:8000,${p.lat},${p.lon})${f}${k.adsizOlur ? "" : '["name"]'};`).join("");
+  const ham = await overpass(`[out:json][timeout:15];(${sorgu});out center tags;`, 16000);
   if (!ham) return [];
-  const adaylar = ham.map(e => { const [la, lo] = elKonum(e); return { ad: e.tags && e.tags.name, lat: la, lon: lo }; })
-    .filter(x => x.ad && isFinite(x.lat) && isFinite(x.lon))
+  const adaylar = ham.map(e => { const [la, lo] = elKonum(e); return { ad: (e.tags && e.tags.name) || (k.adsizOlur ? k.ad : ""), lat: la, lon: lo }; })
+    .filter(x => x.ad && isFinite(x.lat) && isFinite(x.lon) && !/mahallesi|köyü|mah\.?$/i.test(x.ad))
     .map(x => ({ ...x, m: mesafeM(p.lat, p.lon, x.lat, x.lon) }))
     .sort((x, y) => x.m - y.m);
   const gorulen = new Set(), secilen = [];
@@ -1033,28 +1076,34 @@ function yerBul(liste, metinler) {   // metinlerde (önce konum satırları) ge�
 function talimatCoz(metin) {   // başlık yoksa konum sayılır (ada/parsel ya da mahalle sözcüğü), yoksa önemli yer
   const r = { tum: String(metin || ""), konum: [], ada: "", parsel: "", baslangic: "", elle: [], cazibe: [], yol: [], imar: "", doga: "", seslendirme: [], vurgu: [], kategoriler: [], satilik: "", yapi: null, bicim: "", sure: "", ilan: "", yetki: "", firma: "", isim: "", tel: "" };
   const konumIsle = s => { const v = adaParsel(s); if (v.ada) r.ada = v.ada; if (v.parsel) r.parsel = v.parsel; r.konum.push(s); };
-  const listeIsle = (bolum, s) => {
+  const katEkle = k => { if (!r.kategoriler.some(x => x.anahtar === k.anahtar)) r.kategoriler.push({ anahtar: k.anahtar, ad: k.ad, filtre: k.filtre, filtreler: k.filtreler, adsizOlur: k.adsizOlur, sayi: 3, adlar: [] }); };
+  const listeIsle = (bolum, s) => {   // virgülle ayrılan listedeki her yer, hangi bölümde yazılmış olursa olsun doğru yere gider
     for (const x of s.split(/[,\n]|\s+ve\s+/).map(v => v.trim()).filter(Boolean)) {
-      const k = x.match(BASLA_RE);
+      const k = x.match(BASLA_RE), kb = kategoriBaslik(x.toLocaleLowerCase("tr-TR"));
       if (k && k[1].trim()) r.baslangic = k[1].trim();
       else if (konumMi(x)) konumIsle(x);
-      else r[bolum].push(x);
+      else if (kb && kb.uzunluk === x.length) katEkle(kb.k);   // tek başına yazılan kategori: Konut projeleri, Orman, Vadi, Göl, AVM…
+      else if (YOL_ISIM.test(trSade(x))) r.yol.push(x);        // yol adları yol bölümüne
+      else r[bolum === "yol" ? "elle" : bolum].push(x);       // diğer yerler (Simpaş, Eymir Gölü…) önemli yer olarak aranır
     }
   };
   let bolum = null;
   for (const satir of r.tum.split(/\r?\n/)) {
     for (const parca of satir.split(/[.!?;]+(?:\s+|$)/).map(v => v.trim()).filter(Boolean)) {
       const kucuk = parca.toLocaleLowerCase("tr-TR");
-      let bl = bolum, icerik = parca;
+      let bl = bolum, icerik = parca, basilik = null;
       const kb = kategoriBaslik(kucuk);
       if (kb) {
         bl = bolum = "kat:" + kb.k.anahtar; icerik = parca.slice(kb.uzunluk).replace(/^[\s:\-–]+/, "").trim();
-        if (!r.kategoriler.some(x => x.anahtar === kb.k.anahtar)) r.kategoriler.push({ anahtar: kb.k.anahtar, ad: kb.k.ad, filtre: kb.k.filtre, sayi: 3, adlar: [] });
+        if (!r.kategoriler.some(x => x.anahtar === kb.k.anahtar)) r.kategoriler.push({ anahtar: kb.k.anahtar, ad: kb.k.ad, filtre: kb.k.filtre, filtreler: kb.k.filtreler, adsizOlur: kb.k.adsizOlur, sayi: 3, adlar: [] });
       } else for (const [ad, re] of TALIMAT_BOLUM) {
         const m = kucuk.match(re);
-        if (m) { bl = bolum = ad; icerik = parca.slice(m[0].length).replace(/^[\s:\-–]+/, "").trim(); break; }
+        if (m) { bl = bolum = ad; basilik = m[0]; icerik = parca.slice(m[0].length).replace(/^[\s:\-–]+/, "").trim(); break; }
       }
-      if (!icerik) continue;
+      if (!icerik) {   // "Çevre yolu" gibi tek başına yazılan yol başlığı: o yol aranır
+        if (bl === "yol" && basilik && /cevre|otoyol|ana/.test(trSade(basilik))) r.yol.push(/cevre/.test(trSade(basilik)) ? "Çevre yolu" : /otoyol/.test(trSade(basilik)) ? "Otoyol" : "Ana yol");
+        continue;
+      }
       if (TEK_DEGER.includes(bl)) {   // bir satırlık başlıklar: değer alınır, sonraki cümle bölüme dönmez
         if (bl === "satilik") { const n = icerik.match(/\d[\d.]*/); r.satilik = n ? n[0].replace(/\./g, "") : ""; }
         else if (bl === "yapi") r.yapi = koordCoz(icerik);
@@ -1083,7 +1132,7 @@ function talimatCoz(metin) {   // başlık yoksa konum sayılır (ada/parsel ya 
       else listeIsle(bl || "elle", icerik);
     }
   }
-  r.elle = r.elle.slice(0, 4); r.cazibe = r.cazibe.slice(0, 4); r.yol = r.yol.slice(0, 4);
+  r.elle = r.elle.slice(0, 8); r.cazibe = r.cazibe.slice(0, 8); r.yol = r.yol.slice(0, 8);
   return r;
 }
 async function konumUygula(t) {   // talimattaki il, ilçe ve mahalle/köyü TKGM listelerinde bulup seçim kutularına yazar
