@@ -119,7 +119,7 @@
     <div class="ipucu">Video takılırsa HD 720 seçin.</div>
   </details>
   <div class="ipucu">Ana ekrana eklemek için tarayıcı menüsünden “Ana ekrana ekle”yi seçin.</div>
-  <div class="ipucu" id="surum">Sürüm 23</div>
+  <div class="ipucu" id="surum">Sürüm 24</div>
 </div>
 
 <div id="haritaKutu" hidden style="position:fixed;inset:0;z-index:50;background:#0c1016;display:flex;flex-direction:column">
@@ -526,37 +526,66 @@ function ilanCoz(metin) {   // ilan yazısından alanları çıkarır; kopyalana
     return "";
   };
   return {
-    fiyat: bul(/^fiyat\b/).replace(/[^0-9.,A-Za-z ]/g, "").trim(),
-    m2: (bul(/^m[2?]?(?=\s|$)/).match(/\d[\d.,]*/) || [""])[0],
+    fiyat: ((bul(/^fiyat\b/).replace(/[^0-9.,A-Za-z ]/g, "").trim()).match(/^\d[\d.,]*(\s*TL)?/i) || [""])[0],   // "15.500.000 TL 9" gibi OCR kalıntıları atılır
+    m2: (bul(/^m(?:[2?]|[^\w\s]{1,2})?(?=\s|$)/).match(/\d[\d.,]*/) || [""])[0],   // "m²", "m2", "m?" ve OCR'da "m”" olarak okunan biçimler
     aidat: (bul(/^aidat\b/).match(/\d[\d.,]*/) || [""])[0],
     durum: bul(/^durumu\b/),
     tapu: bul(/^tapu durumu\b/),
     isitma: bul(/^isitma\b/),
     yas: bul(/^bina yas\S*/),
-    ilanNo: (bul(/^ilan no\b/).match(/\d{6,}/) || [""])[0]
+    ilanNo: (bul(/^ilan no\b/).match(/\d{6,}/) || [""])[0],
+    tur: bul(/^turu\b/)
   };
 }
-const CEVRE_DURDUR = /^(fiyat|m[2?](\s|$)|aidat|durumu|tapu|isitma|bina yas|ilan no|cevre|yakin cevre)/;   // çevre listesi bu etiketlerde biter
-function cevreCoz(metin) {   // ilan yazısındaki "Çevre" / "Çevresinde" bölümünden yerleri alır: aynı satırda ya da alt alta liste
-  const satirlar = String(metin || "").split(/\r?\n/).map(s => s.trim()).filter(Boolean), yerler = [];
-  for (let i = 0; i < satirlar.length; i++) {
-    const m = ilanSade(satirlar[i]).match(/^(yakin\s+)?cevre(?!\s*yol)(si|sinde|de)?\b/);   // "Çevre yolu" bir yol adıdır, çevre başlığı değildir
-    if (!m) continue;
-    const parcalar = [satirlar[i].slice(m[0].length).replace(/^[\s:\-–]+/, "").replace(/^(bilgisi|bilgileri|özellikleri|ozellikleri)\b[\s:\-–]*/i, "")];
-    let j = i + 1;
-    for (; j < satirlar.length && j <= i + 12; j++) {   // başlıktan sonraki en çok 12 satır: başka bir etiket ya da ":" ile biten başlık gelince durur, uzun cümleler atlanır
-      const s = satirlar[j];
-      if (/:\s*$/.test(s) || /^[^:]{1,25}:/.test(s) || CEVRE_DURDUR.test(ilanSade(s))) break;
-      if (s.length > 70 || /[.!?]$/.test(s)) continue;
-      parcalar.push(s);
-    }
-    i = j - 1;
-    for (const satir of parcalar) for (const x of satir.replace(/^(?:[-•*·●▪►»°@©]\s*|e\s+)/, "").split(/[,;]/)) {
+function satilikIsmi(tur) {   // ilan türünden video dilindeki isim: dükkan, daire…; tanınmazsa "hisse" (arsa ve hisseli parseller)
+  const k = ilanSade(tur || "");
+  if (/dukkan|magaza|is yeri/.test(k)) return "dükkan";
+  if (/daire/.test(k)) return "daire";
+  if (/ofis/.test(k)) return "ofis";
+  if (/villa/.test(k)) return "villa";
+  return "hisse";
+}
+function satilikCumle(yapi, m2, tur) {   // seslendirme: "Yapı burada. Satılık dükkan, 116 metrekare." (hisse için "Satılık hisse, …")
+  const t = tur || "hisse", buyuk = t.charAt(0).toLocaleUpperCase("tr-TR") + t.slice(1), satis = m2 ? `Satılık ${t}, ${m2} metrekare.` : "";
+  if (!yapi) return satis;
+  return [t === "hisse" ? "Yapı burada." : `${buyuk} burada.`, satis].filter(Boolean).join(" ");
+}
+const CEVRE_DURDUR = /^(fiyat|m[2?](\s|$)|aidat|durumu|tapu|isitma|bina yas|ilan no|ilan tarihi|turu|kategori|cevre|yakin cevre)/;   // çevre listesi bu etiketlerde biter
+const CEVRE_ANAHTAR = /(^|\s)(yakin\s+)?cevre(?!\s*yol)|yurume mesafesi|onemli (noktalar|yerler)|civar|etraf/;   // "Çevre: …" gibi satır içi etiketler
+const CEVRE_BASLIK = /^((yakin\s+)?cevre(?!\s*yol)(si|sinde|de)?(\s+(bilgisi|bilgileri|ozellikleri))?|yurume mesafesi\w*(\s+\w+){0,3}|onemli (noktalar|yerler)|yakin (yerler|noktalar)|civar\w*|etraf\w*(\s+\w+){0,2})$/;   // tek başına yazılmış başlık satırı
+const MADDE = /^(?:[-•*·●▪►»°@©]\s*|e\s+)/;   // madde işareti; OCR "*", "•" ya da "e" olarak da okuyabilir
+function ilanYerleri(metin) {   // ilan yazısındaki yakın çevre: "Çevre", "Yürüme mesafesindeki önemli noktalar" ya da "Okullar" gibi başlıklardan sonraki yerler
+  const satirlar = String(metin || "").split(/\r?\n/).map(s => s.trim()).filter(Boolean), yerler = [], kategoriler = [];
+  const ekle = satir => {
+    for (const x of satir.replace(MADDE, "").split(/[,;]/)) {
       const ad = x.trim().replace(/[.\s]+$/, "");
       if (ad.length >= 3 && ad.length <= 60 && !yerler.some(y => trSade(y) === trSade(ad))) yerler.push(ad);
     }
+  };
+  const kategoriMi = metin2 => {   // satırın tamamı bir kategori adıysa (Okullar, Elçilikler…) o kategori
+    const k = metin2.toLocaleLowerCase("tr-TR").replace(MADDE, "").replace(/[:\-–]\s*$/, "").trim(), b = kategoriBaslik(k);
+    return !!b && b.uzunluk === k.length;
+  };
+  for (let i = 0; i < satirlar.length; i++) {
+    const s = satirlar[i], ust = s.indexOf(":"), etiket = ust > 0 ? s.slice(0, ust) : s, etiketSade = ilanSade(etiket);
+    const satirIci = ust > 0 && ((CEVRE_ANAHTAR.test(etiketSade) && !/cevre yol/.test(etiketSade)) || kategoriMi(etiket));
+    const baslik = satirIci || CEVRE_BASLIK.test(ilanSade(s).replace(/[:\-–]\s*$/, "").trim()) || kategoriMi(s);
+    if (!baslik) continue;
+    const icerik = satirIci ? s.slice(ust + 1).trim() : "", onceki = yerler.length;
+    if (icerik) ekle(icerik);
+    let maddeVar = false, j = i + 1;
+    for (; j < satirlar.length && j <= i + 15; j++) {   // en çok 15 satır; başka bir etiket, satır içi listeden sonra gelen düz paragraf ya da madde listesinin bitişi listeyi kapatır
+      const t = satirlar[j];
+      if (/^[^:]{1,25}:/.test(t) || CEVRE_DURDUR.test(ilanSade(t))) break;
+      if (MADDE.test(t)) { ekle(t); maddeVar = true; continue; }
+      if (maddeVar || icerik) break;
+      if (t.length > 45 || /[.!?]$/.test(t)) continue;   // düz satırlarda uzun cümleler atlanır
+      ekle(t);
+    }
+    if (kategoriMi(etiket) && yerler.length === onceki && !icerik) kategoriler.push(etiket.trim());   // yalnız kategori adı yazılmışsa talimata kategori olarak eklenir
+    i = j - 1;
   }
-  return yerler.slice(0, 30);
+  return { yerler: yerler.slice(0, 30), kategoriler: [...new Set(kategoriler)] };
 }
 let ocrCalisan = null, ocrYukleme = null, ocrIlerle = null, ocrIsleniyor = null;   // ekran görüntüsü okuma: OCR motoru ilk kullanımda yüklenir
 const OCR = {   // Tesseract.js 5.1.1 ve Türkçe dil verisi, cdn.jsdelivr.net üzerinden
@@ -627,12 +656,14 @@ async function ocrCalistir(dosyalar) {   // hata olursa fırlatır; çağıran d
   el.value = [el.value.trim(), ocrMetni].filter(Boolean).join("\n");
   ilanTalimatEkle();
 }
-function ilanTalimatEkle() {   // ilan bilgilerinden talimat satırı üretir; talimatta zaten olan satılık ve çevre yerlerine dokunmaz
+function ilanTalimatEkle() {   // ilan bilgilerinden talimat satırı üretir; talimatta zaten olan satılık, çevre yerleri ve kategoriler tekrar yazılmaz
   const metin = $("ilanMetin").value, i = ilanCoz(metin), t = talimatCoz($("talimat").value), satirlar = [];
   if (i.m2 && /satilik/.test(ilanSade(i.durum)) && !t.satilik) satirlar.push("Satılık: " + i.m2.replace(/\./g, ""));
-  const tumCevre = cevreCoz(metin), cevre = tumCevre.filter(x => !trSade(t.tum).includes(trSade(x)));
-  if (cevre.length) satirlar.push("Çevre: " + cevre.join(", "));
-  const ozet = [i.fiyat && "Fiyat " + i.fiyat, i.m2 && i.m2 + " m²", i.aidat && "Aidat " + i.aidat + " TL", i.tapu, i.ilanNo && "İlan no " + i.ilanNo, tumCevre.length && tumCevre.length + " çevre yeri"].filter(Boolean).join(" · ");
+  const ilanYer = ilanYerleri(metin), yeniYer = ilanYer.yerler.filter(x => !trSade(t.tum).includes(trSade(x))), yeniKat = ilanYer.kategoriler.filter(x => !trSade(t.tum).includes(trSade(x)));
+  if (yeniYer.length) satirlar.push("Çevre: " + yeniYer.join(", "));
+  satirlar.push(...yeniKat);
+  const yerSayi = ilanYer.yerler.length + ilanYer.kategoriler.length;
+  const ozet = [i.tur && "Tür " + i.tur, i.fiyat && "Fiyat " + i.fiyat, i.m2 && i.m2 + " m²", i.aidat && "Aidat " + i.aidat + " TL", i.tapu, i.ilanNo && "İlan no " + i.ilanNo, yerSayi && yerSayi + " çevre yeri"].filter(Boolean).join(" · ");
   if (satirlar.length) talimatSatirEkle(satirlar);
   durum(ozet ? `Okunan: ${ozet}${satirlar.length ? ". Talimata eklendi: " + satirlar.join(" · ") : ""}. Metni ve talimatı kontrol edin.` : "İlan metninden bilgi okunamadı. Metni kontrol edin.");
 }
@@ -993,7 +1024,7 @@ function seslendirmeSatirlari() {   // her satır: videonun hangi saniyesinde ba
   satir.push({ at: 0.4, metin: `${p.mahalle}, ${p.ada} ada, ${p.parsel} parsel.` });
   if (S.sehir) satir.push({ at: Z.A[0] + 0.3, metin: `${S.sehir.ad} ile arsa arası ${S.yolBilgi ? `arabayla yaklaşık ${S.yolBilgi.dk} dakika` : mesafeSoz(S.sehirM) + " kuş uçuşu"}.` });
   S.yerler.forEach((y, i) => satir.push({ at: Z.D[0] + i * S.adim + 0.15, metin: `${y.ad}, ${mesafeSoz(y.m)}.` }));
-  satir.push({ at: Z.E[0] + 0.9, metin: S.yapi ? (p.satilik ? `Yapı burada. Satılık hisse, ${p.satilik} metrekare.` : "Yapı burada.") : p.satilik ? `Satılık hisse, ${p.satilik} metrekare.` : "" });
+  satir.push({ at: Z.E[0] + 0.9, metin: satilikCumle(S.yapi, p.satilik, S.tur) });
   if (S.metin && S.metin.imar) satir.push({ at: Z.G[0] + 0.5, metin: `İmar planı. ${S.metin.imar.replace(/\s+/g, " ")}` });
   if (S.metin && S.metin.doga) satir.push({ at: Z.G[0] + 0.5, metin: `Doğa ve yapılaşma. ${S.metin.doga.replace(/\s+/g, " ")}` });
   (S.ekAnlatim || []).forEach((m, i) => satir.push({ at: S.ekAnlatimZaman[i], metin: /[.!?]$/.test(m) ? m : m + "." }));   // talimattaki "Seslendirme:" cümleleri
@@ -1089,7 +1120,7 @@ async function hazirla(a, ilerle = () => { }) {
   const W = dikey ? kisa : Math.round(kisa * 16 / 9), H = dikey ? Math.round(kisa * 16 / 9) : kisa;
   S = { p, W, H, u: Math.min(W, H) / 100, uzun: a.uzunluk !== "kisa", kart: a.kart || KART, yerler: [], hedefSure: a.sureSaniye || 0 };
   S.hisse = a.hisse || null;
-  S.fotolar = a.fotolar || []; S.fotoAlt = a.fotoAlt || "";
+  S.fotolar = a.fotolar || []; S.fotoAlt = a.fotoAlt || ""; S.tur = satilikIsmi(a.tur);
   S.yapi = a.yapi ? { lon: a.yapi[0], lat: a.yapi[1] } : null;
   S.hedef = S.yapi ? { ...S.yapi, ad: "Yapı" } : S.hisse ? (() => { const [la, lo] = alanMerkezi(S.hisse); return { lat: la, lon: lo, ad: "Satılık hisse" }; })() : null;
   ilerle("Başlangıç ve yol bulunuyor…", 0.08);
@@ -1216,7 +1247,7 @@ function secenekDoldur(sel, liste, secili) {
 let mahTum = [];
 async function ilceYukle(secili) { secenekDoldur($("ilce"), await tkgmListe("/idariYapi/ilceListe/" + $("il").value), secili); await mahYukle(); }
 async function mahYukle(secili) { mahTum = await tkgmListe("/idariYapi/mahalleListe/" + $("ilce").value); secenekDoldur($("mah"), mahTum, secili); }
-const TEK_DEGER = ["satilik", "yapi", "bicim", "sure", "ilan", "yetki", "firma", "isim", "tel"];   // bir satırlık başlıklar
+const TEK_DEGER = ["satilik", "yapi", "bicim", "sure", "ilan", "yetki", "firma", "isim", "tel", "tur"];   // bir satırlık başlıklar
 const KATEGORI = [   // talimatta adsız yazılan kategoriler → OpenStreetMap filtresi (adsız yerler atlanır)
   { kelimeler: ["hastaneler", "hastane", "sağlık merkezleri", "sağlık merkezi", "klinikler", "klinik"], ad: "Hastane", filtre: `["amenity"~"^(hospital|clinic)$"]` },
   { kelimeler: ["okullar", "okul", "üniversiteler", "üniversite"], ad: "Okul", filtre: `["amenity"~"^(school|university)$"]` },
@@ -1231,6 +1262,8 @@ const KATEGORI = [   // talimatta adsız yazılan kategoriler → OpenStreetMap 
   { kelimeler: ["konut projeleri", "konut projesi", "konutlar", "siteler", "site projeleri"], ad: "Konut projesi", filtreler: [`["name"~"konut|rezidans|residence|villa|evler|konak",i]`, `["landuse"="residential"]["name"]`] },
   { kelimeler: ["ormanlar", "orman", "ormanlık alan", "ormanlık"], ad: "Orman", filtreler: [`["landuse"="forest"]`, `["natural"="wood"]`], adsizOlur: true },
   { kelimeler: ["vadiler", "vadi"], ad: "Vadi", filtreler: [`["natural"="valley"]`, `["name"~"vadi",i]`] },
+  { kelimeler: ["elçilikler", "elçilik", "büyükelçilikler", "büyükelçilik", "konsolosluklar", "konsolosluk"], ad: "Elçilik", filtreler: [`["amenity"="embassy"]`, `["office"="diplomatic"]`] },
+  { kelimeler: ["hizmet binaları", "hizmet binası", "kamu binaları", "kamu binası", "devlet daireleri", "devlet dairesi"], ad: "Hizmet binası", filtreler: [`["office"="government"]`, `["amenity"~"^(townhall|courthouse|police|post_office|public_building)$"]`] },
   { kelimeler: ["göller", "göl"], ad: "Göl", filtreler: [`["natural"="water"]["water"~"^(lake|reservoir|pond)$"]`, `["natural"="water"]["name"~"göl",i]`] },
 ].map((k, i) => ({ ...k, anahtar: String(i), re: new RegExp("^(" + k.kelimeler.slice().sort((x, y) => y.length - x.length).map(x => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|") + ")(?=\\s*:|\\s*$|\\s+\\d)") }));
 function kategoriBaslik(kucuk) {   // "Hastaneler: 3", "Parklar" gibi başlıklar: kategori ve başlık uzunluğu
@@ -1262,6 +1295,7 @@ const TALIMAT_BOLUM = [   // başlık (küçük harf) → bölüm adı
   ["baslangic", /^(başlangıç noktası|başlangıç|baslangic)(?=[\s:\-–]|$)/],
   ["konum", /^(konum|adres)(?=[\s:\-–]|$)/],
   ["satilik", /^(satılık hisse|satılık|satilik hisse|satilik)(?=[\s:\-–]|$)/],
+  ["tur", /^(türü|turu|tür|tur)(?=[\s:\-–]|$)/],
   ["yapi", /^(yapı işareti|yapı|yapi)(?=[\s:\-–]|$)/],
   ["bicim", /^(biçim|bicim)(?=[\s:\-–]|$)/],
   ["sure", /^(süre|sure)(?=[\s:\-–]|$)/],
@@ -1356,6 +1390,7 @@ function talimatCoz(metin) {   // başlık yoksa konum sayılır (ada/parsel ya 
         else if (bl === "firma") r.firma = icerik.slice(0, 60);
         else if (bl === "isim") r.isim = icerik.slice(0, 60);
         else if (bl === "tel") r.tel = icerik.slice(0, 30);
+        else if (bl === "tur") r.tur = icerik.slice(0, 40);
         bolum = null; continue;
       }
       if (bl && bl.startsWith("kat:")) {   // kategori: "Hastaneler: 3" adet, "Hastaneler: Numune, X" adlar
@@ -1500,7 +1535,9 @@ async function calistir() {
   if (!sesAnahtar) { durum("Seslendirme için Google Cloud API anahtarını girin (Kartvizit, ses ve kalite bölümünde).", null, true); return; }
   try { await ilanGoruntulerioku(); } catch (e) { durum("Ekran görüntüsü okunamadı: " + e.message + " Video üretilmedi.", null, true); return; }   // okunmamış görüntüler önce okunur
   const t = talimatCoz($("talimat").value);
-  for (const x of cevreCoz($("ilanMetin").value)) if (!trSade(t.tum).includes(trSade(x)) && t.elle.length < 30) t.elle.push(x);   // ilan açıklamasındaki çevre yerleri talimatta yoksa yine aranır
+  const ilanYer = ilanYerleri($("ilanMetin").value);
+  for (const x of ilanYer.yerler) if (!trSade(t.tum).includes(trSade(x)) && t.elle.length < 30) t.elle.push(x);   // ilan açıklamasındaki çevre yerleri talimatta yoksa yine aranır
+  for (const k of ilanYer.kategoriler) { const kb = kategoriBaslik(k.toLocaleLowerCase("tr-TR")); if (kb && !t.kategoriler.some(x => x.anahtar === kb.k.anahtar)) t.kategoriler.push({ anahtar: kb.k.anahtar, ad: kb.k.ad, filtre: kb.k.filtre, filtreler: kb.k.filtreler, adsizOlur: kb.k.adsizOlur, sayi: 3, adlar: [] }); }
   sakla.yaz("talimat", $("talimat").value);
   const eksik = [];   // talimatta yazılmayanlar üretimi durdurmaz; video bitince bilgi satırında gösterilir
   if (!t.satilik && !ilanCoz($("ilanMetin").value).m2) eksik.push("satılık m²");
@@ -1524,7 +1561,7 @@ async function calistir() {
   const fotolar = [];   // en çok 6 fotoğraf; okunamayan dosyalar atlanır
   for (const f of [...($("fotolar").files || [])].slice(0, 6)) { try { fotolar.push(await createImageBitmap(f)); } catch (e) { } }
   const a = { il: konum.il, ilce: konum.ilce, mahalle: konum.mah, mahId: $("mah").value,
-    ada, parsel, bicim: t.bicim || "dikey", uzunluk: t.sure || "uzun", sureSaniye: t.sureSaniye || 0, koordlar: t.koordlar, fotolar, fotoAlt: ilanOzet, kalite: +$("kalite").value, satilik: t.satilik || ilanSatilik,
+    ada, parsel, bicim: t.bicim || "dikey", uzunluk: t.sure || "uzun", sureSaniye: t.sureSaniye || 0, koordlar: t.koordlar, fotolar, fotoAlt: ilanOzet, tur: t.tur || ilan.tur, kalite: +$("kalite").value, satilik: t.satilik || ilanSatilik,
     baslangic: t.baslangic, elle: t.elle.join("\n"), cazibe: t.cazibe.join("\n"), yol: t.yol.join("\n"), imar: t.imar, doga: t.doga,
     seslendirme: t.seslendirme, vurgu: t.vurgu, kategoriler: t.kategoriler, hisse, yapi: t.yapi,
     kart: { firma: t.firma || KART.firma, isim: t.isim || KART.isim, tel: t.tel || KART.tel, ilan: t.ilan, yetki: t.yetki } };
