@@ -101,7 +101,7 @@
     <div class="ipucu">Video takılırsa HD 720 seçin.</div>
   </details>
   <div class="ipucu">Ana ekrana eklemek için tarayıcı menüsünden “Ana ekrana ekle”yi seçin.</div>
-  <div class="ipucu" id="surum">Sürüm 7</div>
+  <div class="ipucu" id="surum">Sürüm 8</div>
 </div>
 
 <div id="sahne" hidden>
@@ -370,7 +370,7 @@ function yolKes(yol, f) {      // yolun f (0..1) kadarı: {nokta dizisi, uç}
 function planla() {
   const n = S.yerler.length, u = S.uzun, var_ = S.sehir && S.sehirM > 1500;
   const P = { A: var_ ? (u ? 3.5 : 2.2) : 0, B: var_ ? (u ? 9 : 5) : 0, C: u ? 2.5 : 1.6, D: n * (u ? 1.6 : 1.0),
-              O: n ? (u ? 3.5 : 2.4) : 0, E: u ? 7.5 : 5, F: 2.4 };
+              O: n ? (u ? 3.5 : 2.4) : 0, E: u ? 7.5 : 5, F: 3 };
   let t = 0; S.Z = {};
   for (const k of "ABCDOEF") { S.Z[k] = [t, t + P[k]]; t += P[k]; }
   S.sure = t; S.adim = u ? 1.6 : 1.0;
