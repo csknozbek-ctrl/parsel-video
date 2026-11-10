@@ -795,7 +795,11 @@ async function googleSes(metin, anahtar) {
       })
     });
   } catch (e) { throw new Error("Ses servisine ulaşılamadı. İnternet bağlantınızı kontrol edin."); }
-  if (r.status === 400 || r.status === 401 || r.status === 403) throw new Error("Ses anahtarı reddedildi. Google anahtarını, Text-to-Speech API etkinliğini ve kısıtlamaları kontrol edin.");
+  if (r.status === 400 || r.status === 401 || r.status === 403) {
+    let mesaj = "";   // Google'ın kendi açıklaması (ör. referer engeli, API etkin değil, faturalandırma)
+    try { mesaj = (await r.json()).error.message || ""; } catch (e) { }
+    throw new Error(`Ses anahtarı reddedildi${mesaj ? ` (Google: ${mesaj})` : ""}. Google anahtarını, Text-to-Speech API etkinliğini ve kısıtlamaları kontrol edin.`);
+  }
   if (!r.ok) throw new Error(`Ses servisi hata verdi (${r.status}).`);
   const json = await r.json();
   const bin = atob(json.audioContent);
