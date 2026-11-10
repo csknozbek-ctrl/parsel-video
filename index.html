@@ -306,6 +306,20 @@ async function cevreYerler(lat, lon, enCok, ilerle) {
   return secilen.sort((x, y) => KAT[x.tur][2] - KAT[y.tur][2] || x.m - y.m).slice(0, enCok).sort((x, y) => x.m - y.m)
     .map(y => ({ ...y, kategori: KAT[y.tur][0], renk: KAT[y.tur][1], ad: y.ad || KAT[y.tur][0], grup: "cevre" }));
 }
+const YAKIN_ETIKET = { embassy: "Elçilik", diplomatic: "Elçilik", school: "Okul", university: "Üniversite", hospital: "Hastane", clinic: "Klinik", townhall: "Belediye", courthouse: "Adliye", police: "Emniyet", post_office: "PTT", public_building: "Hizmet binası", government: "Kamu dairesi", mall: "AVM", station: "İstasyon" };   // önemli yer sayılan kurumlar
+async function yakinOnemliYerler(lat, lon, r, enCok, ilerle) {   // daire ve dükkan: adı yazılmasa da r metre içindeki önemli yerler, en yakın enCok tanesi
+  ilerle("Yakındaki önemli yerler aranıyor…");
+  const a = `(around:${r},${lat},${lon})`;
+  const ham = await overpass(`[out:json][timeout:12];(nwr${a}["amenity"~"^(embassy|school|university|hospital|clinic|townhall|courthouse|police|post_office|public_building)$"];nwr${a}["office"~"^(diplomatic|government)$"];nwr${a}["shop"="mall"];nwr${a}["railway"="station"];);out center tags;`);
+  if (!ham) return [];
+  const yakin = ham.map(el => {
+    const t = el.tags || {}, [la, lo] = elKonum(el), tur = t.amenity || t.office || t.shop || t.railway || "";
+    return { ad: t.name, tur, lat: la, lon: lo, kategori: YAKIN_ETIKET[tur] || "", m: la ? mesafeM(lat, lon, la, lo) : Infinity };
+  }).filter(y => y.ad && y.kategori && y.m <= r).sort((x, y) => x.m - y.m);
+  const gorulen = new Set();
+  return yakin.filter(y => { const k = trSade(y.ad); if (gorulen.has(k)) return false; gorulen.add(k); return true; }).slice(0, enCok)
+    .map(y => ({ ...y, renk: "#ffcf3f", grup: "cevre" }));
+}
 async function cazibeMerkezleri(lat, lon, r, enCok, ilerle) {
   ilerle("Cazibe merkezleri aranıyor…");
   const a = `(around:${r},${lat},${lon})`;
@@ -1165,7 +1179,11 @@ async function hazirla(a, ilerle = () => { }) {
     ? [...(await cevreYerler(p.lat, p.lon, 5, m => ilerle(m, 0.37))), ...(await cazibeMerkezleri(p.lat, p.lon, 10000, 5, m => ilerle(m, 0.38))), ...(await yollar(p.lat, p.lon, m => ilerle(m, 0.39)))]
     : [];
   S.metin = { imar: (a.imar || "").trim().slice(0, 500), doga: (a.doga || "").trim().slice(0, 500) };
-  const gorulen = new Set(), tekil = [...elle.yerler, ...cazibe.yerler, ...yol.yerler, ...kat, ...oto].filter(y => { const k = trSade(y.ad); if (gorulen.has(k)) return false; gorulen.add(k); return true; });   // aynı yer iki kez yazılmasın
+  // daire ve dükkan ilanlarında: adı yazılmasa da 1 km (yarıçap) içindeki önemli yerler de eklenir; yazılanlarla aynı olanlar tekrar edilmez
+  const yakin = (S.tur === "dükkan" || S.tur === "daire") ? await yakinOnemliYerler(p.lat, p.lon, 1000, 6, m => ilerle(m, 0.37)) : [];
+  const listeAdlari = [...elle.yerler, ...cazibe.yerler, ...yol.yerler, ...kat].map(y => trSade(y.ad));
+  const yakinYeni = yakin.filter(y => !listeAdlari.some(ad => ad && (ad.includes(trSade(y.ad)) || trSade(y.ad).includes(ad))));
+  const gorulen = new Set(), tekil = [...elle.yerler, ...cazibe.yerler, ...yol.yerler, ...kat, ...oto, ...yakinYeni].filter(y => { const k = trSade(y.ad); if (gorulen.has(k)) return false; gorulen.add(k); return true; });   // aynı yer iki kez yazılmasın
   S.atlanan = S.atlanan.filter(s => !gorulen.has(trSade(s)));   // başka yoldan bulunan yerler "bulunamadı" listesinde kalmasın
   const acikSayi = elle.yerler.length + cazibe.yerler.length + yol.yerler.length + kat.length;   // yazılan ve işaretlenen yerlerin hepsi girer
   const sinir = Math.min(30, Math.max(16, acikSayi));
