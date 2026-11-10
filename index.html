@@ -93,9 +93,8 @@
     <label for="kTel">Telefon</label><input id="kTel" inputmode="tel">
     <label for="kIlan">Sahibinden.com ilan linki</label><input id="kIlan" inputmode="url" autocomplete="off" placeholder="https://www.sahibinden.com/ilan/...">
     <label for="kYetki">Yetki belgesi numarası</label><input id="kYetki" autocomplete="off">
-    <label for="sesAnahtar">Yapay ses anahtarı (Azure Speech)</label><input id="sesAnahtar" type="password" autocomplete="off">
-    <label for="sesBolge">Ses bölgesi</label><input id="sesBolge" autocomplete="off" placeholder="westeurope">
-    <div class="ipucu">Seslendirme için Azure Speech kaynağının anahtarı ve bölgesi gerekir; anahtar yoksa video hazırlanmaz.</div>
+    <label for="sesAnahtar">Google Cloud API anahtarı (Text-to-Speech)</label><input id="sesAnahtar" type="password" autocomplete="off">
+    <div class="ipucu">Seslendirme için Google Cloud Text-to-Speech API anahtarı gerekir; anahtar yoksa video hazırlanmaz.</div>
     <label for="kalite">Kalite</label>
     <select id="kalite"><option value="720">HD 720 (hızlı)</option><option value="1080">Full HD 1080</option></select>
     <div class="ipucu">Video takılırsa HD 720 seçin.</div>
@@ -684,9 +683,9 @@ function hisseCoz(kmlMetin, koorMetin) {   // KML'den ya da köşe satırlarınd
   return h;
 }
 
-/* ---------------- Yapay ses (Azure Speech) ---------------- */
+/* ---------------- Yapay ses (Google Cloud Text-to-Speech) ---------------- */
 let sesCtx = null, aktifSesler = [];
-const SES_SESI = "tr-TR-AhmetNeural";
+const SES_SESI = "tr-TR-Wavenet-D";   // başka bir Türkçe ses denemek için yalnızca bu satırı değiştirin
 function mesafeSoz(m) { return m < 950 ? `${Math.round(m / 10) * 10} metre` : `${(m / 1000).toFixed(1).replace(".", ",")} kilometre`; }
 function seslendirmeSatirlari() {   // her satır: videonun hangi saniyesinde başlayacağı ve metni
   const p = S.p, Z = S.Z, satir = [];
@@ -697,25 +696,33 @@ function seslendirmeSatirlari() {   // her satır: videonun hangi saniyesinde ba
   satir.push({ at: Z.F[0] + 0.3, metin: `${S.kart.firma}. ${S.kart.isim}.` });
   return satir.filter(s => s.metin.replace(/[\s.,:]/g, "").length > 0);
 }
-async function azureSes(metin, anahtar, bolge) {
-  const kacis = s => s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[c]);
-  const ssml = `<speak version="1.0" xml:lang="tr-TR"><voice xml:lang="tr-TR" name="${SES_SESI}"><prosody rate="-4%">${kacis(metin)}</prosody></voice></speak>`;
+async function googleSes(metin, anahtar) {
   let r;
   try {
-    r = await fetch(`https://${bolge}.tts.speech.microsoft.com/cognitiveservices/v1`, {
-      method: "POST", body: ssml,
-      headers: { "Ocp-Apim-Subscription-Key": anahtar, "Content-Type": "application/ssml+xml", "X-Microsoft-OutputFormat": "audio-24khz-96kbitrate-mono-mp3" } });
-  } catch (e) { throw new Error("Ses servisine ulaşılamadı. İnternet bağlantısını ya da ses bölgesini kontrol edin."); }
-  if (r.status === 401 || r.status === 403) throw new Error("Ses anahtarı reddedildi. Anahtarı ve bölgeyi kontrol edin.");
+    r = await fetch(`https://texttospeech.googleapis.com/v1/text:synthesize?key=${encodeURIComponent(anahtar)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        input: { text: metin },
+        voice: { languageCode: "tr-TR", name: SES_SESI },
+        audioConfig: { audioEncoding: "MP3", speakingRate: 0.96 }
+      })
+    });
+  } catch (e) { throw new Error("Ses servisine ulaşılamadı. İnternet bağlantınızı kontrol edin."); }
+  if (r.status === 400 || r.status === 401 || r.status === 403) throw new Error("Ses anahtarı reddedildi. Google anahtarını, Text-to-Speech API etkinliğini ve kısıtlamaları kontrol edin.");
   if (!r.ok) throw new Error(`Ses servisi hata verdi (${r.status}).`);
-  return await r.arrayBuffer();
+  const json = await r.json();
+  const bin = atob(json.audioContent);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes.buffer;
 }
-async function sesHazirla(anahtar, bolge, ilerle) {
+async function sesHazirla(anahtar, ilerle) {
   const satirlar = seslendirmeSatirlari(), sesler = [];
   let bitis = 0;
   for (let i = 0; i < satirlar.length; i++) {
     ilerle(`Seslendirme hazırlanıyor… (${i + 1}/${satirlar.length})`, 0.36 + 0.02 * i / satirlar.length);
-    const buf = await sesCtx.decodeAudioData(await azureSes(satirlar[i].metin, anahtar, bolge));
+    const buf = await sesCtx.decodeAudioData(await googleSes(satirlar[i].metin, anahtar));
     const at = Math.max(satirlar[i].at, bitis);   // üst üste binmesin
     sesler.push({ at, buf }); bitis = at + buf.duration + 0.05;
   }
@@ -837,7 +844,7 @@ const kartOku = () => ({ firma: $("kFirma").value.trim(), isim: $("kIsim").value
 async function formBasla() {
   const q = new URLSearchParams(location.search);
   $("kFirma").value = sakla.oku("firma", KART.firma); $("kIsim").value = sakla.oku("isim", KART.isim); $("kTel").value = sakla.oku("tel", KART.tel);
-  $("kIlan").value = sakla.oku("ilan", ""); $("kYetki").value = sakla.oku("yetki", ""); $("sesAnahtar").value = sakla.oku("sesAnahtar", ""); $("sesBolge").value = sakla.oku("sesBolge", "westeurope");
+  $("kIlan").value = sakla.oku("ilan", ""); $("kYetki").value = sakla.oku("yetki", ""); $("sesAnahtar").value = sakla.oku("sesAnahtar", "");
   $("formMarka").textContent = $("kFirma").value;
   $("bicim").value = q.get("bicim") || sakla.oku("bicim", "dikey"); $("uzunluk").value = q.get("sure") || sakla.oku("uzunluk", "uzun"); $("kalite").value = sakla.oku("kalite", "720");
   $("ada").value = q.get("ada") || ""; $("parsel").value = q.get("parsel") || "";
@@ -862,8 +869,8 @@ async function formBasla() {
 async function calistir() {
   const sec = id => $(id).options[$(id).selectedIndex];
   if (!$("mah").value || !$("parsel").value.trim()) { durum("Mahalle/köy ve parsel numarası gerekli.", null, true); return; }
-  const sesAnahtar = $("sesAnahtar").value.trim(), sesBolge = $("sesBolge").value.trim() || "westeurope";
-  if (!sesAnahtar) { durum("Seslendirme için yapay ses anahtarını girin (Kartvizit, ses ve kalite bölümünde).", null, true); return; }
+  const sesAnahtar = $("sesAnahtar").value.trim();
+  if (!sesAnahtar) { durum("Seslendirme için Google Cloud API anahtarını girin (Kartvizit, ses ve kalite bölümünde).", null, true); return; }
   if (!sesCtx) sesCtx = new (window.AudioContext || window.webkitAudioContext)();
   sesCtx.resume().catch(() => { });
   const kmlDosya = $("hisseKml").files[0], hisseKoor = $("hisseKoor").value, yapiMetin = $("yapiIsaret").value.trim();
@@ -873,12 +880,12 @@ async function calistir() {
   if (yapiMetin && !yapi) { durum("Yapı işareti “enlem, boylam” biçiminde olmalı.", null, true); return; }
   const a = { il: sec("il").textContent, ilce: sec("ilce").textContent, mahalle: sec("mah").textContent, mahId: $("mah").value,
     ada: $("ada").value.trim() || "0", parsel: $("parsel").value.trim(), bicim: $("bicim").value, uzunluk: $("uzunluk").value, kalite: +$("kalite").value, satilik: $("satilik").value.trim(), baslangic: $("baslangic").value.trim(), elle: $("elle").value, hisse, yapi, kart: kartOku() };
-  for (const [k, v] of [["il", a.il], ["ilce", a.ilce], ["mah", a.mahalle], ["bicim", a.bicim], ["uzunluk", a.uzunluk], ["kalite", a.kalite], ["firma", a.kart.firma], ["isim", a.kart.isim], ["tel", a.kart.tel], ["ilan", a.kart.ilan], ["yetki", a.kart.yetki], ["sesAnahtar", sesAnahtar], ["sesBolge", sesBolge]]) sakla.yaz(k, v);
+  for (const [k, v] of [["il", a.il], ["ilce", a.ilce], ["mah", a.mahalle], ["bicim", a.bicim], ["uzunluk", a.uzunluk], ["kalite", a.kalite], ["firma", a.kart.firma], ["isim", a.kart.isim], ["tel", a.kart.tel], ["ilan", a.kart.ilan], ["yetki", a.kart.yetki], ["sesAnahtar", sesAnahtar]]) sakla.yaz(k, v);
   $("basla").disabled = true; sonVideo = null; $("bIndir").hidden = true; $("bPaylas").hidden = true;
   try {
     await Promise.all(["800", "700", "600"].map(w => document.fonts.load(`${w} 40px Inter`))).catch(() => { });
     await hazirla(a, durum);
-    await sesHazirla(sesAnahtar, sesBolge, durum);
+    await sesHazirla(sesAnahtar, durum);
     await onYukle(durum);
     $("form").hidden = true; $("sahne").hidden = false;
     $("bilgi").textContent = `${Math.round(S.sure)} saniyelik video hazır. “Kaydet” videoyu dosyaya çevirir.` + (S.atlanan && S.atlanan.length ? ` Bulunamayan yerler: ${S.atlanan.join(", ")}.` : "");
