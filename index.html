@@ -107,7 +107,7 @@
     <div class="ipucu">Video takılırsa HD 720 seçin.</div>
   </details>
   <div class="ipucu">Ana ekrana eklemek için tarayıcı menüsünden “Ana ekrana ekle”yi seçin.</div>
-  <div class="ipucu" id="surum">Sürüm 19</div>
+  <div class="ipucu" id="surum">Sürüm 20</div>
 </div>
 
 <div id="haritaKutu" hidden style="position:fixed;inset:0;z-index:50;background:#0c1016;display:flex;flex-direction:column">
@@ -900,6 +900,9 @@ function sesBaslat(hedefler) {   // video zamanına göre sesleri ve müziği pl
   sesDur();
   if (!sesCtx || !S.sesler) return;
   const bas = sesCtx.currentTime + 0.1;
+  const sinir = sesCtx.createDynamicsCompressor();   // tepe kırpmasını önler: sesler −2 dB üstüne çıkmaz
+  sinir.threshold.value = -2; sinir.knee.value = 0; sinir.ratio.value = 20; sinir.attack.value = 0.002; sinir.release.value = 0.2;
+  for (const h of hedefler) sinir.connect(h);
   if (muzikBuf) {
     const mk = sesCtx.createBufferSource(), kazanc = sesCtx.createGain();
     mk.buffer = muzikBuf; mk.loop = true;
@@ -911,13 +914,13 @@ function sesBaslat(hedefler) {   // video zamanına göre sesleri ve müziği pl
       kazanc.gain.linearRampToValueAtTime(MUZIK_SEV, son + 0.6);
     }
     mk.connect(kazanc);
-    for (const h of hedefler) kazanc.connect(h);
+    kazanc.connect(sinir);
     mk.start(bas); aktifSesler.push(mk);
   }
   for (const s of S.sesler) {
     const k = sesCtx.createBufferSource();
     k.buffer = s.buf;
-    for (const h of hedefler) k.connect(h);
+    k.connect(sinir);
     k.start(bas + s.at); aktifSesler.push(k);
   }
 }
@@ -958,6 +961,12 @@ async function hazirla(a, ilerle = () => { }) {
     const secilen = hepsi.filter(y => (cevreIste && y.kategori === "Çevre yolu") || (anaIste && y.kategori === "Ana yol"));
     if (secilen.length) yol.yerler.push(...secilen); else yol.atlanan.push(...genelYol);
   }
+  // koordinatı yazılan yerler aranmadan eklenir (Google Haritalar'da uzun basınca çıkan enlem, boylam)
+  const koordYer = grup => (a.koordlar || []).filter(k => (k.grup === "cazibe") === (grup === "cazibe")).map(k => {
+    const m = mesafeM(p.lat, p.lon, k.lat, k.lon);
+    return { ad: yazimDuzelt(k.ad), tur: grup, lat: k.lat, lon: k.lon, m, kategori: grup === "cazibe" ? "Cazibe merkezi" : "Önemli yer", renk: grup === "cazibe" ? "#7fe3a0" : "#ffcf3f", grup };
+  });
+  for (const [liste, grup] of [[elle, "sizin"], [cazibe, "cazibe"]]) for (const y of koordYer(grup)) { if (y.m <= 25000) liste.yerler.push(y); else liste.atlanan.push(`${y.ad} (25 km'den uzak)`); }
   S.atlanan = [...elle.atlanan, ...cazibe.atlanan, ...yol.atlanan];
   S.duzeltmeler = [...elle.duzelt, ...cazibe.duzelt, ...yol.duzelt];
   // talimatta kategori yazıldıysa: adları yazılanlar aranır, adsızlar için arsaya en yakın adlı yerler bulunur
@@ -1152,11 +1161,12 @@ function sureSaniyeCoz(s) {   // "1 dakika", "90 saniye", "1,5 dk" → saniye; s
   return Math.min(600, Math.max(20, Math.round(sn)));
 }
 function talimatCoz(metin) {   // başlık yoksa konum sayılır (ada/parsel ya da mahalle sözcüğü), yoksa önemli yer
-  const r = { tum: String(metin || ""), konum: [], ada: "", parsel: "", baslangic: "", elle: [], cazibe: [], yol: [], imar: "", doga: "", seslendirme: [], vurgu: [], kategoriler: [], satilik: "", yapi: null, bicim: "", sure: "", sureSaniye: 0, ilan: "", yetki: "", firma: "", isim: "", tel: "" };
+  const r = { tum: String(metin || ""), konum: [], ada: "", parsel: "", baslangic: "", elle: [], cazibe: [], yol: [], imar: "", doga: "", seslendirme: [], vurgu: [], kategoriler: [], koordlar: [], satilik: "", yapi: null, bicim: "", sure: "", sureSaniye: 0, ilan: "", yetki: "", firma: "", isim: "", tel: "" };
   const konumIsle = s => { const v = adaParsel(s); if (v.ada) r.ada = v.ada; if (v.parsel) r.parsel = v.parsel; r.konum.push(s); };
   const katEkle = k => { if (!r.kategoriler.some(x => x.anahtar === k.anahtar)) r.kategoriler.push({ anahtar: k.anahtar, ad: k.ad, filtre: k.filtre, filtreler: k.filtreler, adsizOlur: k.adsizOlur, sayi: 3, adlar: [] }); };
   const listeIsle = (bolum, s) => {   // virgülle ayrılan listedeki her yer, hangi bölümde yazılmış olursa olsun doğru yere gider
-    for (const x of s.split(/[,\n]|\s+ve\s+/).map(v => v.trim()).filter(Boolean)) {
+    const kalan = s.replace(/([^,\n:]+?)\s*:\s*(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)/g, (m, ad, la, lo) => { r.koordlar.push({ ad: ad.trim(), lat: +la, lon: +lo, grup: bolum === "cazibe" ? "cazibe" : "sizin" }); return ""; });   // "Sinpaş: 39.93, 32.85" → koordinatı verilmiş yer, aranmaz
+    for (const x of kalan.split(/[,\n]|\s+ve\s+/).map(v => v.trim()).filter(Boolean)) {
       const k = x.match(BASLA_RE), kb = kategoriBaslik(x.toLocaleLowerCase("tr-TR"));
       if (k && k[1].trim()) r.baslangic = k[1].trim();
       else if (konumMi(x)) konumIsle(x);
@@ -1332,6 +1342,12 @@ async function calistir() {
   if (!sesAnahtar) { durum("Seslendirme için Google Cloud API anahtarını girin (Kartvizit, ses ve kalite bölümünde).", null, true); return; }
   const t = talimatCoz($("talimat").value);
   sakla.yaz("talimat", $("talimat").value);
+  const eksik = [];   // zorunlu bilgiler yazılmadıysa üretimden önce sorulur
+  if (!t.satilik) eksik.push("satılık m²");
+  if (!t.ilan) eksik.push("ilan linki");
+  if (!t.yetki) eksik.push("yetki belgesi no");
+  if (!t.seslendirme.length) eksik.push("seslendirme cümleleri");
+  if (eksik.length && !confirm(`Talimatta şunlar yazılmamış: ${eksik.join(", ")}.\n\nYine de video üretilsin mi?`)) { durum("Video üretilmedi. Eksik bilgileri talimata yazıp tekrar deneyin."); return; }
   const ada = t.ada || $("ada").value.trim() || "0", parsel = t.parsel || $("parsel").value.trim();
   if (!parsel) { durum("Parsel numarasını yazın. Örnek: “Kocatepe mahallesi 123 ada 4 parsel”.", null, true); $("konumDetay").open = true; return; }
   let konum;
@@ -1345,7 +1361,7 @@ async function calistir() {
   const hisse = hisseCoz(kmlDosya ? await kmlDosya.text() : "", hisseKoor);
   if ((kmlDosya || hisseKoor.trim()) && !hisse) { durum("Hisse sınırı okunamadı. KML dosyasını ya da en az 3 koordinat satırını kontrol edin.", null, true); return; }
   const a = { il: konum.il, ilce: konum.ilce, mahalle: konum.mah, mahId: $("mah").value,
-    ada, parsel, bicim: t.bicim || "dikey", uzunluk: t.sure || "uzun", sureSaniye: t.sureSaniye || 0, kalite: +$("kalite").value, satilik: t.satilik,
+    ada, parsel, bicim: t.bicim || "dikey", uzunluk: t.sure || "uzun", sureSaniye: t.sureSaniye || 0, koordlar: t.koordlar, kalite: +$("kalite").value, satilik: t.satilik,
     baslangic: t.baslangic, elle: t.elle.join("\n"), cazibe: t.cazibe.join("\n"), yol: t.yol.join("\n"), imar: t.imar, doga: t.doga,
     seslendirme: t.seslendirme, vurgu: t.vurgu, kategoriler: t.kategoriler, hisse, yapi: t.yapi,
     kart: { firma: t.firma || KART.firma, isim: t.isim || KART.isim, tel: t.tel || KART.tel, ilan: t.ilan, yetki: t.yetki } };
