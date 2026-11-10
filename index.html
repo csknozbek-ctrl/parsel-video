@@ -94,7 +94,7 @@
     <div class="ipucu">Video takılırsa HD 720 seçin.</div>
   </details>
   <div class="ipucu">Ana ekrana eklemek için tarayıcı menüsünden “Ana ekrana ekle”yi seçin.</div>
-  <div class="ipucu" id="surum">Sürüm 17</div>
+  <div class="ipucu" id="surum">Sürüm 18</div>
 </div>
 
 <div id="haritaKutu" hidden style="position:fixed;inset:0;z-index:50;background:#0c1016;display:flex;flex-direction:column">
@@ -373,9 +373,20 @@ function planla() {
               O: n ? (u ? 3.5 : 2.4) : 0, E: u ? 7.5 : 5, G: 0, F: 3 };
   const yaziKarakter = S.metin ? S.metin.imar.length + S.metin.doga.length : 0;
   P.G = yaziKarakter ? Math.max(8, 3 + yaziKarakter / 13) : 0;
+  // talimatta süre yazıldıysa aşamalar ona göre ölçeklenir; seslendirme ve kamera yer adımları (adim) aynı oranda kayar
+  const TUM = "ABCDOEGF", topla = () => TUM.split("").reduce((s, k) => s + P[k], 0), natAdim = u ? 1.6 : 1.0;
+  S.adim = natAdim;
+  if (S.hedefSure > 0 && topla() > 0) {
+    const f = S.hedefSure / topla();
+    if (f >= 1 || !n) { for (const k of TUM) P[k] *= f; S.adim = natAdim * f; }
+    else { // kısa hedefte her yerin seslendirme süresi (D) korunur, diğer aşamalar kısalır
+      const rf = Math.max(0.3, (S.hedefSure - P.D) / (topla() - P.D));
+      for (const k of TUM) if (k !== "D") P[k] *= rf;
+    }
+  }
   let t = 0; S.Z = {};
-  for (const k of "ABCDOEGF") { S.Z[k] = [t, t + P[k]]; t += P[k]; }
-  S.sure = t; S.adim = u ? 1.6 : 1.0;
+  for (const k of TUM) { S.Z[k] = [t, t + P[k]]; t += P[k]; }
+  S.sure = t;
 }
 const faz = (k, t) => { const [a, b] = S.Z[k]; return b > a ? sinirla((t - a) / (b - a), 0, 1) : (t >= a ? 1 : 0); };
 
@@ -895,7 +906,7 @@ async function hazirla(a, ilerle = () => { }) {
   p.satilik = a.satilik || "";
   const dikey = a.bicim !== "yatay", kisa = a.kalite === 1080 ? 1080 : 720;
   const W = dikey ? kisa : Math.round(kisa * 16 / 9), H = dikey ? Math.round(kisa * 16 / 9) : kisa;
-  S = { p, W, H, u: Math.min(W, H) / 100, uzun: a.uzunluk !== "kisa", kart: a.kart || KART, yerler: [] };
+  S = { p, W, H, u: Math.min(W, H) / 100, uzun: a.uzunluk !== "kisa", kart: a.kart || KART, yerler: [], hedefSure: a.sureSaniye || 0 };
   S.hisse = a.hisse || null;
   S.yapi = a.yapi ? { lon: a.yapi[0], lat: a.yapi[1] } : null;
   S.hedef = S.yapi ? { ...S.yapi, ad: "Yapı" } : S.hisse ? (() => { const [la, lo] = alanMerkezi(S.hisse); return { lat: la, lon: lo, ad: "Satılık hisse" }; })() : null;
@@ -1104,8 +1115,16 @@ function yerBul(liste, metinler) {   // metinlerde (önce konum satırları) ge�
   }
   return null;
 }
+function sureSaniyeCoz(s) {   // "1 dakika", "90 saniye", "1,5 dk" → saniye; sayı yoksa 0 (kısa/uzun kullanılır)
+  const m = String(s || "").toLocaleLowerCase("tr-TR").match(/(\d+(?:[.,]\d+)?)\s*(dakika|dk|saniye|sn|sec|s)\b/);
+  if (!m) return 0;
+  const v = parseFloat(m[1].replace(",", "."));
+  if (!(v > 0)) return 0;
+  const sn = /^(dakika|dk)$/.test(m[2]) ? v * 60 : v;
+  return Math.min(600, Math.max(20, Math.round(sn)));
+}
 function talimatCoz(metin) {   // başlık yoksa konum sayılır (ada/parsel ya da mahalle sözcüğü), yoksa önemli yer
-  const r = { tum: String(metin || ""), konum: [], ada: "", parsel: "", baslangic: "", elle: [], cazibe: [], yol: [], imar: "", doga: "", seslendirme: [], vurgu: [], kategoriler: [], satilik: "", yapi: null, bicim: "", sure: "", ilan: "", yetki: "", firma: "", isim: "", tel: "" };
+  const r = { tum: String(metin || ""), konum: [], ada: "", parsel: "", baslangic: "", elle: [], cazibe: [], yol: [], imar: "", doga: "", seslendirme: [], vurgu: [], kategoriler: [], satilik: "", yapi: null, bicim: "", sure: "", sureSaniye: 0, ilan: "", yetki: "", firma: "", isim: "", tel: "" };
   const konumIsle = s => { const v = adaParsel(s); if (v.ada) r.ada = v.ada; if (v.parsel) r.parsel = v.parsel; r.konum.push(s); };
   const katEkle = k => { if (!r.kategoriler.some(x => x.anahtar === k.anahtar)) r.kategoriler.push({ anahtar: k.anahtar, ad: k.ad, filtre: k.filtre, filtreler: k.filtreler, adsizOlur: k.adsizOlur, sayi: 3, adlar: [] }); };
   const listeIsle = (bolum, s) => {   // virgülle ayrılan listedeki her yer, hangi bölümde yazılmış olursa olsun doğru yere gider
@@ -1139,7 +1158,7 @@ function talimatCoz(metin) {   // başlık yoksa konum sayılır (ada/parsel ya 
         if (bl === "satilik") { const n = icerik.match(/\d[\d.]*/); r.satilik = n ? n[0].replace(/\./g, "") : ""; }
         else if (bl === "yapi") r.yapi = koordCoz(icerik);
         else if (bl === "bicim") r.bicim = icerik.toLocaleLowerCase("tr-TR").includes("yatay") ? "yatay" : "dikey";
-        else if (bl === "sure") r.sure = /kısa|kisa/.test(icerik.toLocaleLowerCase("tr-TR")) ? "kisa" : "uzun";
+        else if (bl === "sure") { r.sure = /kısa|kisa/.test(icerik.toLocaleLowerCase("tr-TR")) ? "kisa" : "uzun"; r.sureSaniye = sureSaniyeCoz(icerik); }
         else if (bl === "ilan") r.ilan = (icerik.match(/https?:\/\/\S+/) || [""])[0];
         else if (bl === "yetki") r.yetki = icerik.slice(0, 40);
         else if (bl === "firma") r.firma = icerik.slice(0, 60);
@@ -1236,7 +1255,7 @@ async function calistir() {
   const hisse = hisseCoz(kmlDosya ? await kmlDosya.text() : "", hisseKoor);
   if ((kmlDosya || hisseKoor.trim()) && !hisse) { durum("Hisse sınırı okunamadı. KML dosyasını ya da en az 3 koordinat satırını kontrol edin.", null, true); return; }
   const a = { il: konum.il, ilce: konum.ilce, mahalle: konum.mah, mahId: $("mah").value,
-    ada, parsel, bicim: t.bicim || "dikey", uzunluk: t.sure || "uzun", kalite: +$("kalite").value, satilik: t.satilik,
+    ada, parsel, bicim: t.bicim || "dikey", uzunluk: t.sure || "uzun", sureSaniye: t.sureSaniye || 0, kalite: +$("kalite").value, satilik: t.satilik,
     baslangic: t.baslangic, elle: t.elle.join("\n"), cazibe: t.cazibe.join("\n"), yol: t.yol.join("\n"), imar: t.imar, doga: t.doga,
     seslendirme: t.seslendirme, vurgu: t.vurgu, kategoriler: t.kategoriler, hisse, yapi: t.yapi,
     kart: { firma: t.firma || KART.firma, isim: t.isim || KART.isim, tel: t.tel || KART.tel, ilan: t.ilan, yetki: t.yetki } };
