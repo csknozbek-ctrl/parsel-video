@@ -58,8 +58,7 @@
 
   <label for="il">İl</label><select id="il"><option>Yükleniyor…</option></select>
   <label for="ilce">İlçe</label><select id="ilce"></select>
-  <label for="mahAra">Mahalle / köy</label>
-  <input id="mahAra" type="search" placeholder="Adını yazarak süzün (isteğe bağlı)" autocomplete="off">
+  <label for="mah">Mahalle / köy</label>
   <select id="mah" style="margin-top:8px"></select>
   <div class="iki">
     <div><label for="ada">Ada</label><input id="ada" inputmode="numeric" autocomplete="off" placeholder="0"></div>
@@ -101,7 +100,7 @@
     <div class="ipucu">Video takılırsa HD 720 seçin.</div>
   </details>
   <div class="ipucu">Ana ekrana eklemek için tarayıcı menüsünden “Ana ekrana ekle”yi seçin.</div>
-  <div class="ipucu" id="surum">Sürüm 8</div>
+  <div class="ipucu" id="surum">Sürüm 9</div>
 </div>
 
 <div id="sahne" hidden>
@@ -121,8 +120,7 @@
 "use strict";
 /* ==================================================================
    PARSEL VİDEO — telefonda çalışan sürüm
-   Şehir merkezinden arsaya uçar, çevreyi tek tek gösterir, parsele iner,
-   kartvizitle kapanır. Her şey tek bir tuvale çizilir; o tuval kaydedilir.
+   Şehir merkezinden arsaya uçar, çevreyi tek tek gösterir, parsele iner ve durur. Her şey tek bir tuvale çizilir; o tuval kaydedilir.
    ================================================================== */
 const KART = { firma: "Ankara Arazi Ofisi", isim: "Coşkun Özbek", tel: "0532 382 71 14" };
 const TKGM = "https://cbsapi.tkgm.gov.tr/megsiswebapi.v3/api";
@@ -370,9 +368,9 @@ function yolKes(yol, f) {      // yolun f (0..1) kadarı: {nokta dizisi, uç}
 function planla() {
   const n = S.yerler.length, u = S.uzun, var_ = S.sehir && S.sehirM > 1500;
   const P = { A: var_ ? (u ? 3.5 : 2.2) : 0, B: var_ ? (u ? 9 : 5) : 0, C: u ? 2.5 : 1.6, D: n * (u ? 1.6 : 1.0),
-              O: n ? (u ? 3.5 : 2.4) : 0, E: u ? 7.5 : 5, F: 3 };
+              O: n ? (u ? 3.5 : 2.4) : 0, E: u ? 7.5 : 5 };
   let t = 0; S.Z = {};
-  for (const k of "ABCDOEF") { S.Z[k] = [t, t + P[k]]; t += P[k]; }
+  for (const k of "ABCDOE") { S.Z[k] = [t, t + P[k]]; t += P[k]; }
   S.sure = t; S.adim = u ? 1.6 : 1.0;
 }
 const faz = (k, t) => { const [a, b] = S.Z[k]; return b > a ? sinirla((t - a) / (b - a), 0, 1) : (t >= a ? 1 : 0); };
@@ -415,8 +413,8 @@ function kamera(t) {
   if (S.yol && t < Z.A[1]) { menzil = logu(S.rBas, S.rYol, pA); egim = ara(-88, -50, pA); }
   else if (S.yol && t < Z.B[1]) { menzil = logu(S.rYol, S.genis, yumusak((faz("B", t) - 0.62) / 0.38)); egim = ara(-50, -46, pB); }
   else { menzil = logu(S.genis, S.yakin, pE); egim = ara(-46, -34, pE); }
-  const tCD = sinirla(t - Z.C[0], 0, Z.O[1] - Z.C[0]), tEF = sinirla(t - Z.E[0], 0, Z.F[1] - Z.E[0]);
-  const aci = S.yon + 70 * tCD / Math.max(0.001, Z.O[1] - Z.C[0]) + 170 * tEF / Math.max(0.001, Z.F[1] - Z.E[0]);
+  const tCD = sinirla(t - Z.C[0], 0, Z.O[1] - Z.C[0]), tEF = sinirla(t - Z.E[0], 0, Z.E[1] - Z.E[0]);
+  const aci = S.yon + 70 * tCD / Math.max(0.001, Z.O[1] - Z.C[0]) + 170 * tEF / Math.max(0.001, Z.E[1] - Z.E[0]);
   viewer.camera.lookAt(C3(hedef[0], hedef[1], 0), new Cesium.HeadingPitchRange(aci * RAD, egim * RAD, menzil));
   S.menzil = menzil;
   // yerlerin açılma durumu
@@ -488,7 +486,6 @@ function hud(t) {
   yaz(3.9 * u, 800); ctx.fillStyle = "#ffd24a"; ctx.fillText(sigdir([p.satilik ? "Satılık " + p.satilik + " m²" : "", p.nitelik].filter(Boolean).join(" · "), basW - 5.5 * u), basX + 3.2 * u, basY + 12.7 * u);
 
   const altSinir = H - 6 * u, sinir = [ustAlt, altSinir];
-  const eSon = yumusak(faz("F", t) / 0.35);
 
   // --- haritadaki işaretler (üst kartların ve alt şeridin üstüne taşmaz) ---
   ctx.save(); ctx.beginPath(); ctx.rect(0, ustAlt - u, W, altSinir + 2 * u - ustAlt); ctx.clip();
@@ -562,8 +559,8 @@ function hud(t) {
   }
 
   // --- hedef işaret: yapı (işaretlendiyse) ya da satılık hisse ---
-  if (S.hedef && t >= Z.E[0] + 0.8 && eSon < 0.98) {
-    const a = yumusak((t - Z.E[0] - 0.8) / 0.8) * (1 - eSon), c = ekran(S.hedef.lon, S.hedef.lat);
+  if (S.hedef && t >= Z.E[0] + 0.8) {
+    const a = yumusak((t - Z.E[0] - 0.8) / 0.8) , c = ekran(S.hedef.lon, S.hedef.lat);
     if (c && a > 0.02 && c.x > -200 && c.x < W + 200 && c.y > -200 && c.y < H + 200) {
       ctx.globalAlpha = a; igne(c.x, c.y, "#ffd24a", 1.9 * u);
       etiket(c.x, c.y, S.yapi ? "Yapı" : "Satılık hisse", S.yapi ? "Satılık hisse üzerinde" : "", "#ffd24a", true, sinir);
@@ -572,31 +569,13 @@ function hud(t) {
   }
 
   // --- parsel bilgisi (E) ---
-  if (t >= Z.E[0] + 0.8 && eSon < 0.98) {
-    const a = yumusak((t - Z.E[0] - 0.8) / 0.8) * (1 - eSon), w = dikey ? W - 2 * kenar : 70 * u, h = 25 * u, x = (W - w) / 2, y0 = altSinir - h - 2 * u;
+  if (t >= Z.E[0] + 0.8) {
+    const a = yumusak((t - Z.E[0] - 0.8) / 0.8) , w = dikey ? W - 2 * kenar : 70 * u, h = 25 * u, x = (W - w) / 2, y0 = altSinir - h - 2 * u;
     ctx.globalAlpha = a; kutuCiz(x, y0, w, h, 2 * u, "rgba(12,16,22,.88)"); ctx.textAlign = "center";
     yaz(10 * u, 800); ctx.fillStyle = "#ffd24a"; ctx.fillText(p.satilik ? p.satilik + " m²" : `${p.ada} / ${p.parsel}`, W / 2, y0 + 2 * u);
     yaz(4 * u, 700); ctx.fillStyle = "#fff"; ctx.fillText(sigdir([p.satilik ? "Satılık hisse" : p.nitelik,`${p.ada} ada ${p.parsel} parsel`].filter(Boolean).join(" · "), w - 4 * u), W / 2, y0 + 13.4 * u);
     if (S.sehir) { yaz(3.4 * u, 600); ctx.fillStyle = "#d5dbe3";
       ctx.fillText(sigdir(`${S.sehir.etiket}: ` + (S.yolBilgi ? `arabayla ${S.yolBilgi.dk} dk` : mesafeYazi(S.sehirM) + " (kuş uçuşu)"), w - 4 * u), W / 2, y0 + 19.2 * u); }
-    ctx.textAlign = "left"; ctx.globalAlpha = 1;
-  }
-
-  // --- kapanış kartı (F) ---
-  if (eSon > 0.01) {
-    ctx.globalAlpha = eSon * 0.8; ctx.fillStyle = "#06090d"; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = eSon;
-    const w = Math.min(W - 2 * kenar, 92 * u), h = 58 * u, x = (W - w) / 2, y0 = (H - h) / 2;
-    kutuCiz(x, y0, w, h, 2.6 * u, "#ffffff"); kutuCiz(x, y0, w, 1.6 * u, 0.8 * u, "#c8a24a");
-    ctx.textAlign = "center";
-    yaz(7.4 * u, 800); ctx.fillStyle = "#10161d"; ctx.fillText(sigdir(k.firma || "", w - 6 * u), W / 2, y0 + 6 * u);
-    yaz(4.4 * u, 600); ctx.fillStyle = "#3c4653"; ctx.fillText(sigdir(k.isim || "", w - 6 * u), W / 2, y0 + 16.5 * u);
-    yaz(9.4 * u, 800); ctx.fillStyle = "#9a6f12"; ctx.fillText(sigdir(k.tel || "", w - 6 * u), W / 2, y0 + 24.5 * u);
-    ctx.fillStyle = "#c8a24a"; ctx.fillRect(W / 2 - 14 * u, y0 + 37.5 * u, 28 * u, 0.4 * u);
-    yaz(3.5 * u, 700); ctx.fillStyle = "#10161d";
-    ctx.fillText(sigdir(`${p.mahalle} ${p.ada}/${p.parsel}` + (p.satilik ? ` · ${p.satilik} m² satılık` : ""), w - 6 * u), W / 2, y0 + 40.5 * u);
-    yaz(3.1 * u, 500); ctx.fillStyle = "#5a6573"; ctx.fillText("Bilgi ve yer gösterme için arayın", W / 2, y0 + 46 * u);
-    const altSatir = [k.yetki ? "Yetki belgesi " + k.yetki : "", k.ilan ? k.ilan.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "") : ""].filter(Boolean).join("  ·  ");
-    if (altSatir) { yaz(2.8 * u, 600); ctx.fillStyle = "#3c4653"; ctx.fillText(sigdir(altSatir, w - 6 * u), W / 2, y0 + 51.5 * u); }
     ctx.textAlign = "left"; ctx.globalAlpha = 1;
   }
 
@@ -694,7 +673,6 @@ function seslendirmeSatirlari() {   // her satır: videonun hangi saniyesinde ba
   if (S.sehir) satir.push({ at: Z.A[0] + 0.3, metin: `${S.sehir.ad} ile arsa arası ${S.yolBilgi ? `arabayla yaklaşık ${S.yolBilgi.dk} dakika` : mesafeSoz(S.sehirM) + " kuş uçuşu"}.` });
   S.yerler.forEach((y, i) => satir.push({ at: Z.D[0] + i * S.adim + 0.15, metin: `${y.ad}, ${mesafeSoz(y.m)}.` }));
   satir.push({ at: Z.E[0] + 0.9, metin: S.yapi ? (p.satilik ? `Yapı burada. Satılık hisse, ${p.satilik} metrekare.` : "Yapı burada.") : p.satilik ? `Satılık hisse, ${p.satilik} metrekare.` : "Arsamız burada." });
-  satir.push({ at: Z.F[0] + 0.3, metin: `${S.kart.firma}. ${S.kart.isim}.` });
   return satir.filter(s => s.metin.replace(/[\s.,:]/g, "").length > 0);
 }
 async function azureSes(metin, anahtar, bolge) {
@@ -756,12 +734,9 @@ async function hazirla(a, ilerle = () => { }) {
     if (S.sehirM > 1500) S.yol = yolHazirla(nokta);
     S.yon = yon(S.sehir.lat, S.sehir.lon, p.lat, p.lon);
   } else S.yon = -25;
-  const cevre = await cevreYerler(p.lat, p.lon, 5, m => ilerle(m, 0.15));
-  const cazibe = await cazibeMerkezleri(p.lat, p.lon, 10000, 5, m => ilerle(m, 0.3));
   const elle = await elleYerGetir(p, a.elle, m => ilerle(m, 0.32));
   S.atlanan = elle.atlanan;
-  const yolListe = await yollar(p.lat, p.lon, m => ilerle(m, 0.34));
-  S.yerler = elle.yerler.concat(cevre, cazibe, yolListe).map((y, i) => ({ ...y, no: i + 1, mesafe: mesafeYazi(y.m) }));
+  S.yerler = elle.yerler.map((y, i) => ({ ...y, no: i + 1, mesafe: mesafeYazi(y.m) }));
   const enUzak = Math.max(900, ...S.yerler.map(y => y.m));
   S.genis = sinirla(Math.max(enUzak * (dikey ? 3.0 : 2.3), p.cap * 4), 1200, 32000);
   S.yakin = Math.min(Math.max(p.cap * (dikey ? 2.6 : 1.8), 300), S.genis);
@@ -831,7 +806,7 @@ function secenekDoldur(sel, liste, secili) {
 }
 let mahTum = [];
 async function ilceYukle(secili) { secenekDoldur($("ilce"), await tkgmListe("/idariYapi/ilceListe/" + $("il").value), secili); await mahYukle(); }
-async function mahYukle(secili) { mahTum = await tkgmListe("/idariYapi/mahalleListe/" + $("ilce").value); $("mahAra").value = ""; secenekDoldur($("mah"), mahTum, secili); }
+async function mahYukle(secili) { mahTum = await tkgmListe("/idariYapi/mahalleListe/" + $("ilce").value); secenekDoldur($("mah"), mahTum, secili); }
 const kartOku = () => ({ firma: $("kFirma").value.trim(), isim: $("kIsim").value.trim(), tel: $("kTel").value.trim(), ilan: $("kIlan").value.trim(), yetki: $("kYetki").value.trim() });
 
 async function formBasla() {
@@ -850,7 +825,6 @@ async function formBasla() {
   } catch (e) { $("il").innerHTML = "<option>Yüklenemedi</option>"; durum("TKGM listeleri alınamadı. Sayfayı yenileyin. (" + e.message + ")", null, true); }
   $("il").onchange = () => ilceYukle().catch(e => durum("İlçeler alınamadı: " + e.message, null, true));
   $("ilce").onchange = () => mahYukle().catch(e => durum("Mahalleler alınamadı: " + e.message, null, true));
-  $("mahAra").oninput = () => { const s = trSade($("mahAra").value); secenekDoldur($("mah"), mahTum.filter(o => trSade(o.text).includes(s))); };
   $("basla").onclick = calistir;
   $("bOynat").onclick = () => { dugmeKilit(true); oynat(() => dugmeKilit(false)); };
   $("bKaydet").onclick = kaydet;
