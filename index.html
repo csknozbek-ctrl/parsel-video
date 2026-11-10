@@ -119,7 +119,7 @@
     <div class="ipucu">Video takılırsa HD 720 seçin.</div>
   </details>
   <div class="ipucu">Ana ekrana eklemek için tarayıcı menüsünden “Ana ekrana ekle”yi seçin.</div>
-  <div class="ipucu" id="surum">Sürüm 25</div>
+  <div class="ipucu" id="surum">Sürüm 26</div>
 </div>
 
 <div id="haritaKutu" hidden style="position:fixed;inset:0;z-index:50;background:#0c1016;display:flex;flex-direction:column">
@@ -1463,8 +1463,9 @@ async function konumUygula(t) {   // talimattaki il, ilçe ve mahalle/köyü TKG
   const bahsi = metinler.some(m => mahBahsi(m));
   const aday = acik.length ? acik : bahsi ? [] : mahListe.filter(o => { const ad = adSade(o.text); return ad !== ilceAd && ad !== ilAd; });
   const mah = yerBul(aday, metinler);
-  if (!mah && bahsi) return { tamam: false, mesaj: "Talimattaki mahalle bu ilçede bulunamadı. Mahalleyi seçip tekrar deneyin." };
-  if (!mah && !mahListe.some(o => String(o.id) === onceki.mah)) return { tamam: false, mesaj: "Mahalle ya da köy seçin ya da talimata adını yazın (örnek: “Kocatepe mahallesi 123 ada 4 parsel”)." };
+  const ekranda = mahListe.some(o => String(o.id) === onceki.mah);   // ekrandaki mahalle bu ilçenin listesinde mi
+  if (!mah && bahsi && !ekranda) return { tamam: false, mesaj: "Talimattaki mahalle bu ilçede bulunamadı. Mahalle kutusundan seçin." };
+  if (!mah && !ekranda) return { tamam: false, mesaj: "Mahalle ya da köy seçin ya da talimata adını yazın (örnek: “Kocatepe mahallesi 123 ada 4 parsel”)." };
   // her şey tamam: seçim kutuları ancak bu noktada değişir (hata durumunda ekran olduğu gibi kalır)
   if (il) $("il").value = il.id;
   secenekDoldur($("ilce"), ilceListe, ilceId);
@@ -1472,7 +1473,8 @@ async function konumUygula(t) {   // talimattaki il, ilçe ve mahalle/köyü TKG
   secenekDoldur($("mah"), mahListe, mah ? mah.id : onceki.mah);
   if (!$("mah").value) return { tamam: false, mesaj: "Mahalle ya da köy seçilmedi." };
   const adiOku = s => s.options[s.selectedIndex] ? s.options[s.selectedIndex].textContent : "";
-  return { tamam: true, il: adiOku($("il")), ilce: adiOku($("ilce")), mah: adiOku($("mah")) };
+  const uyari = !mah && bahsi ? `Talimattaki mahalle bu ilçede yok; ekrandaki mahalle kullanıldı (${adiOku($("mah"))}). Yanlışsa talimattaki konum satırını düzeltin.` : "";
+  return { tamam: true, il: adiOku($("il")), ilce: adiOku($("ilce")), mah: adiOku($("mah")), uyari };
 }
 /* ---------------- Bölge listesi: konut projeleri ve AVM'ler işaretlenir, talimata eklenir ---------------- */
 const BOLGE_YARICAP = 5000;   // bu uzaklıktaki adlı konut projeleri ve AVM'ler listelenir
@@ -1593,7 +1595,7 @@ async function calistir() {
   try { konum = await konumUygula(t); } catch (e) { durum("İl, ilçe ya da mahalle listesi alınamadı: " + e.message, null, true); return; }
   if (!konum.tamam) { durum(konum.mesaj, null, true); return; }
   $("ada").value = ada; $("parsel").value = parsel;
-  durum(`Konum: ${konum.il} / ${konum.ilce} / ${konum.mah} · ${ada} ada ${parsel} parsel`);
+  durum(`Konum: ${konum.il} / ${konum.ilce} / ${konum.mah} · ${ada} ada ${parsel} parsel` + (konum.uyari ? ` · ${konum.uyari}` : ""));
   if (!sesCtx) sesCtx = new (window.AudioContext || window.webkitAudioContext)();
   sesCtx.resume().catch(() => { });
   const kmlDosya = $("hisseKml").files[0], hisseKoor = $("hisseKoor").value;
