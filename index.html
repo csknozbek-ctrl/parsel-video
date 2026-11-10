@@ -165,10 +165,12 @@ const ara = (a, b, k) => a + (b - a) * k;
 const yumusak = x => { x = sinirla(x, 0, 1); return x * x * (3 - 2 * x); };
 const RAD = Math.PI / 180;
 
-function trSade(s) {
+function trHarf(s) {   // Türkçe harfleri sadeleştirir; sondaki mahalle/köy sözcüğünü silmez
   const h = { "İ": "i", "I": "i", "ı": "i", "Ş": "s", "ş": "s", "Ğ": "g", "ğ": "g", "Ü": "u", "ü": "u", "Ö": "o", "ö": "o", "Ç": "c", "ç": "c", "Â": "a", "â": "a", "Î": "i", "î": "i", "Û": "u", "û": "u" };
-  return String(s || "").trim().replace(/[İIıŞşĞğÜüÖöÇçÂâÎîÛû]/g, c => h[c]).toLowerCase()
-    .replace(/\s+(mahallesi|mah\.?|koyu|mh\.?)$/, "").replace(/\s+/g, " ");
+  return String(s || "").trim().replace(/[İIıŞşĞğÜüÖöÇçÂâÎîÛû]/g, c => h[c]).toLowerCase();
+}
+function trSade(s) {   // sonda "mahallesi / mah. / koyu" varsa silinir
+  return trHarf(s).replace(/\s+(mahallesi|mah\.?|koyu|mh\.?)$/, "").replace(/\s+/g, " ");
 }
 function mesafeM(lat1, lon1, lat2, lon2) {
   const a = Math.sin((lat2 - lat1) * RAD / 2) ** 2 + Math.cos(lat1 * RAD) * Math.cos(lat2 * RAD) * Math.sin((lon2 - lon1) * RAD / 2) ** 2;
@@ -1180,9 +1182,9 @@ async function hazirla(a, ilerle = () => { }) {
     : [];
   S.metin = { imar: (a.imar || "").trim().slice(0, 500), doga: (a.doga || "").trim().slice(0, 500) };
   // daire ve dükkan ilanlarında: adı yazılmasa da 1 km (yarıçap) içindeki önemli yerler de eklenir; yazılanlarla aynı olanlar tekrar edilmez
-  const yakin = (S.tur === "dükkan" || S.tur === "daire") ? await yakinOnemliYerler(p.lat, p.lon, 1000, 6, m => ilerle(m, 0.37)) : [];
+  const yakin = (S.tur === "dükkan" || S.tur === "daire") ? await yakinOnemliYerler(p.lat, p.lon, 1000, 12, m => ilerle(m, 0.37)) : [];
   const listeAdlari = [...elle.yerler, ...cazibe.yerler, ...yol.yerler, ...kat].map(y => trSade(y.ad));
-  const yakinYeni = yakin.filter(y => !listeAdlari.some(ad => ad && (ad.includes(trSade(y.ad)) || trSade(y.ad).includes(ad))));
+  const yakinYeni = yakin.filter(y => !listeAdlari.some(ad => ad && (ad.includes(trSade(y.ad)) || trSade(y.ad).includes(ad)))).slice(0, 6);
   const gorulen = new Set(), tekil = [...elle.yerler, ...cazibe.yerler, ...yol.yerler, ...kat, ...oto, ...yakinYeni].filter(y => { const k = trSade(y.ad); if (gorulen.has(k)) return false; gorulen.add(k); return true; });   // aynı yer iki kez yazılmasın
   S.atlanan = S.atlanan.filter(s => !gorulen.has(trSade(s)));   // başka yoldan bulunan yerler "bulunamadı" listesinde kalmasın
   const acikSayi = elle.yerler.length + cazibe.yerler.length + yol.yerler.length + kat.length;   // yazılan ve işaretlenen yerlerin hepsi girer
@@ -1324,13 +1326,14 @@ const TALIMAT_BOLUM = [   // başlık (küçük harf) → bölüm adı
   ["tel", /^(telefon|tel)(?=[\s:\-–]|$)/],
   ["yol", /^(otoyol[a-zçğıöşü]*|ana yollar|ana yol|çevre yolu[a-zçğıöşü]*|cevre yolu[a-zçğıöşü]*|yollar|yol)(?=[\s:\-–]|$)/],
   ["cazibe", /^(cazibe merkezleri|cazibe merkezi|cazibe|avm(?:['’]?[a-zçğıöşü]+)?|alışveriş merkezleri|alışveriş merkezi|alisveris merkezleri|alisveris merkezi)(?=[\s:\-–]|$)/],
-  ["elle", /^(önemli yerler|önemli yer|önemli|onemli yerler|onemli yer|onemli|çevre bilgisi|cevre bilgisi|çevre|cevre)(?=[\s:\-–]|$)/],
+  ["elle", /^(yakın çevre|yakin cevre|önemli yerler|önemli yer|önemli|onemli yerler|onemli yer|onemli|çevre bilgisi|cevre bilgisi|çevre|cevre)(?=[\s:\-–]|$)/],
   ["imar", /^(imar planı bilgisi|imar planı|imar)(?=[\s:\-–]|$)/],
   ["doga", /^(doğa ve yapılaşma bilgisi|doğa ve yapılaşma|doğa|doga)(?=[\s:\-–]|$)/],
   ["seslendirme", /^(seslendirme|anlatım|anlatim)(?=[\s:\-–]|$)/],
   ["vurgu", /^(vurgulanacaklar|vurgulanacak|vurgula|vurgu)(?=[\s:\-–]|$)/],
 ];
-const KONUM_KELIME = ["mahalle", "mahallesi", "mah", "ilçe", "ilçesi", "köy", "köyü"];
+const KONUM_KELIME = ["mahalle", "mahallesi", "mah", "mh", "ilçe", "ilçesi", "köy", "köyü"];
+const KONUM_SADE = KONUM_KELIME.map(k => trSade(k));
 function adaParsel(s) {   // "123 ada 4 parsel", "ada 123 parsel 4", "ada: 12, parsel: 3", "parsel 4 ada 123" ve ekli yazımları (adası, parseli) okur
   const A = "ada(?:s[ıi])?(?![a-zçğıöşü])", P = "parsel(?:[ıi])?(?![a-zçğıöşü])", N = "(?:nolu\\s*|no\\s*)?";
   const kalip = p => new RegExp(p, "i");
@@ -1344,15 +1347,15 @@ function adaParsel(s) {   // "123 ada 4 parsel", "ada 123 parsel 4", "ada: 12, p
   const tekP = s.match(kalip(`(?:(\\d+)\\s*${N}${P}|${P}\\s*${N}:?\\s*(\\d+))`));
   return { ada: tekA ? (tekA[1] || tekA[2]) : "", parsel: tekP ? (tekP[1] || tekP[2]) : "" };
 }
-const konumMi = s => { const v = adaParsel(s); return !!(v.ada || v.parsel) || s.toLocaleLowerCase("tr-TR").split(/[\s,.;:()]+/).some(w => KONUM_KELIME.includes(w)); };
+const konumMi = s => { const v = adaParsel(s); return !!(v.ada || v.parsel) || s.split(/[\s,.;:()]+/).some(w => KONUM_SADE.includes(trSade(w))); };
 const adSade = s => trSade(s).replace(/[^a-z0-9 ]+/g, " ").replace(/\b(mahallesi|mahalle|mah|koyu|koy|ilcesi|ilce|ili|il)\b/g, " ").replace(/\s+/g, " ").trim();
-function yerBul(liste, metinler) {   // metinlerde (önce konum satırları) geçen en uzun il / ilçe / mahalle adı
+function yerBul(liste, metinler) {   // metinlerde (önce konum satırları) geçen il / ilçe / mahalle adı: önce geçen, eşitlikte en uzun
   for (const metin of metinler) {
     const t = " " + adSade(metin) + " ";
-    let en = null, uz = 0;
+    let en = null, uz = 0, yer = Infinity;
     for (const o of liste) {
-      const ad = adSade(o.text);
-      if (ad.length >= 3 && ad.length > uz && t.includes(" " + ad + " ")) { en = o; uz = ad.length; }
+      const ad = adSade(o.text), m = ad && t.match(new RegExp(" " + ad + "(ta|te|da|de)? ")), i = m ? m.index : -1;
+      if (ad.length >= 3 && i >= 0 && (i < yer || (i === yer && ad.length > uz))) { en = o; uz = ad.length; yer = i; }
     }
     if (en) return en;
   }
@@ -1375,7 +1378,7 @@ function talimatCoz(metin) {   // başlık yoksa konum sayılır (ada/parsel ya 
     for (const x of kalan.split(/[,\n]|\s+ve\s+/).map(v => v.trim()).filter(Boolean)) {
       const k = x.match(BASLA_RE), kb = kategoriBaslik(x.toLocaleLowerCase("tr-TR"));
       if (k && k[1].trim()) r.baslangic = k[1].trim();
-      else if (konumMi(x)) konumIsle(x);
+      else if (adaParsel(x).ada || adaParsel(x).parsel) konumIsle(x);   // çevre listesinde kurum adları (ilçe, mahalle sözcüklü) konum sayılmaz
       else if (kb && kb.uzunluk === x.length) katEkle(kb.k);   // tek başına yazılan kategori: Konut projeleri, Orman, Vadi, Göl, AVM…
       else if (YOL_ISIM.test(trSade(x))) r.yol.push(x);        // yol adları yol bölümüne
       else r[bolum === "yol" ? "elle" : bolum].push(x);       // diğer yerler (Simpaş, Eymir Gölü…) önemli yer olarak aranır
@@ -1383,7 +1386,7 @@ function talimatCoz(metin) {   // başlık yoksa konum sayılır (ada/parsel ya 
   };
   let bolum = null;
   for (const satir of r.tum.split(/\r?\n/)) {
-    for (const parca of satir.split(/[.!?;]+(?:\s+|$)/).map(v => v.trim()).filter(Boolean)) {
+    for (const parca of satir.replace(/\b(mh|mah)\.(?=\s|$)/gi, "$1").split(/[.!?;]+(?:\s+|$)/).map(v => v.trim()).filter(Boolean)) {
       const kucuk = parca.toLocaleLowerCase("tr-TR");
       let bl = bolum, icerik = parca, basilik = null;
       const kb = kategoriBaslik(kucuk);
@@ -1430,23 +1433,42 @@ function talimatCoz(metin) {   // başlık yoksa konum sayılır (ada/parsel ya 
   r.elle = r.elle.slice(0, 30); r.cazibe = r.cazibe.slice(0, 30); r.yol = r.yol.slice(0, 30);
   return r;
 }
-function mahKelimeli(ad, metin) {   // "Çankaya mahallesi" gibi mahalle sözcüğüyle yazılmış ad
-  return !!ad && new RegExp(`(^| )${ad} (mahallesi|mahalle|mah|mh|koyu|koy)( |$)`).test(" " + trSade(metin).replace(/[^a-z0-9 ]+/g, " ") + " ");
+const MAH_EK = "(mahallesi|mahalle|mah|mh|koyu|koy)";   // mahalle ya da köy sözcüğü (sade yazım)
+function trKonum(s) {   // konum metnini karşılaştırmaya hazırlar; "mahallesi / köyü" sözcüklerini silmez
+  return trHarf(s).replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+}
+function adAcik(o, metin) {   // "Çankaya mahallesi", "Sancak köyü": listedeki ad, kendi türünün sözcüğünün hemen önünde mi
+  const ad = adSade(o.text), koy = / koy(u)?$/.test(trKonum(o.text));   // TKGM'de "… KÖYÜ" yazan kayıt köydür
+  return !!ad && new RegExp(`(^| )${ad} ${koy ? "(koyu|koy)" : "(mahallesi|mahalle|mah|mh)"}( |$)`).test(trKonum(metin));
+}
+function mahBahsi(metin) {   // metinde bir sözcükten sonra mahalle/köy sözcüğü var mı ("… mahallesi", "… mah.", "… köyü")
+  return new RegExp(`[a-z0-9]+ ${MAH_EK}( |$)`).test(trKonum(metin));
 }
 async function konumUygula(t) {   // talimattaki il, ilçe ve mahalle/köyü TKGM listelerinde bulup seçim kutularına yazar
-  const metinler = [t.konum.join(" ")].filter(v => v.trim());   // yalnızca konum satırları: "Çankaya Belediyesi…" gibi çevre yerleri ilçe ya da mahalle sanılmaz
-  const onceki = { ilce: $("ilce").value, mah: $("mah").value };   // talimatta yazılmayan konum ekrandaki seçimden alınır
-  const il = yerBul(await tkgmListe("/idariYapi/ilListe"), metinler);
-  if (il) $("il").value = il.id;
-  const ilceListe = await tkgmListe("/idariYapi/ilceListe/" + $("il").value);
+  const metin = t.konum.join(" ");   // yalnızca konum satırları: "Çankaya Belediyesi…" gibi çevre yerleri ilçe ya da mahalle sanılmaz
+  const metinler = metin.trim() ? [metin] : [];
+  const onceki = { il: $("il").value, ilce: $("ilce").value, mah: $("mah").value };   // talimatta yazılmayan konum ekrandaki seçimden alınır
+  const ilListe = await tkgmListe("/idariYapi/ilListe");
+  const il = yerBul(ilListe, metinler);
+  const ilId = il ? il.id : onceki.il;
+  const ilceListe = await tkgmListe("/idariYapi/ilceListe/" + ilId);
   const ilce = yerBul(ilceListe, metinler);
   if (!ilce && !ilceListe.some(o => String(o.id) === onceki.ilce)) return { tamam: false, mesaj: "İlçe seçin ya da talimata ilçe adını yazın." };
-  secenekDoldur($("ilce"), ilceListe, ilce ? ilce.id : onceki.ilce);
-  const mahListe = await tkgmListe("/idariYapi/mahalleListe/" + $("ilce").value);
-  mahTum = mahListe;
-  const secilenIlce = ilceListe.find(o => String(o.id) === $("ilce").value), ilceAd = secilenIlce ? adSade(secilenIlce.text) : "";
-  const mah = yerBul(mahListe.filter(o => adSade(o.text) !== ilceAd || metinler.some(m => mahKelimeli(ilceAd, m))), metinler);   // ilçeyle aynı adlı mahalle (Çankaya gibi) yalnızca "… mahallesi" diye yazılırsa seçilir
+  const ilceId = ilce ? ilce.id : onceki.ilce;
+  const mahListe = await tkgmListe("/idariYapi/mahalleListe/" + ilceId);
+  const adDe = (liste, id) => { const o = liste.find(x => String(x.id) === String(id)); return o ? adSade(o.text) : ""; };
+  const ilAd = adDe(ilListe, ilId), ilceAd = adDe(ilceListe, ilceId);
+  // 1) "… mahallesi / köyü" diye açıkça yazılan ad  2) yazılmamışsa il ve ilçe adı dışındaki en uygun ad  3) hiçbiri yoksa ekrandaki seçim
+  const acik = mahListe.filter(o => metinler.some(m => adAcik(o, m)));
+  const bahsi = metinler.some(m => mahBahsi(m));
+  const aday = acik.length ? acik : bahsi ? [] : mahListe.filter(o => { const ad = adSade(o.text); return ad !== ilceAd && ad !== ilAd; });
+  const mah = yerBul(aday, metinler);
+  if (!mah && bahsi) return { tamam: false, mesaj: "Talimattaki mahalle bu ilçede bulunamadı. Mahalleyi seçip tekrar deneyin." };
   if (!mah && !mahListe.some(o => String(o.id) === onceki.mah)) return { tamam: false, mesaj: "Mahalle ya da köy seçin ya da talimata adını yazın (örnek: “Kocatepe mahallesi 123 ada 4 parsel”)." };
+  // her şey tamam: seçim kutuları ancak bu noktada değişir (hata durumunda ekran olduğu gibi kalır)
+  if (il) $("il").value = il.id;
+  secenekDoldur($("ilce"), ilceListe, ilceId);
+  mahTum = mahListe;
   secenekDoldur($("mah"), mahListe, mah ? mah.id : onceki.mah);
   if (!$("mah").value) return { tamam: false, mesaj: "Mahalle ya da köy seçilmedi." };
   const adiOku = s => s.options[s.selectedIndex] ? s.options[s.selectedIndex].textContent : "";
