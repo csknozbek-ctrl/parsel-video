@@ -132,10 +132,12 @@ const SATIRLAR = [
 
 // roller arayüzü
 const secim = {};
+// ?ses=celebi:Fenrir,abidin:Puck  -> force voices for this run
+const ZORLA = Object.fromEntries((new URLSearchParams(location.search).get("ses") || "").split(",").filter(Boolean).map(x => x.split(":")));
 for (const [k, r] of Object.entries(ROLLER)) {
   const satir = document.createElement("div"); satir.className = "rol";
   const liste = r.cins === "K" ? KADIN : ERKEK;
-  const kayitli = sakla.oku("bahar." + k, r.ses);
+  const kayitli = ZORLA[k] || sakla.oku("bahar." + k, r.ses);
   satir.innerHTML = `<div>${r.ad}</div><select>${liste.map(s => `<option ${s === kayitli ? "selected" : ""}>${s}</option>`).join("")}</select><button class="ikincil">Dinle</button>`;
   const sel = satir.querySelector("select"); secim[k] = sel;
   sel.onchange = () => sakla.yaz("bahar." + k, sel.value);
