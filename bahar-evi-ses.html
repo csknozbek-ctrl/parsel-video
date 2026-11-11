@@ -90,10 +90,10 @@ const SATIRLAR = [
   ["bektas", "İkisi bir arada olmaz mı? Hayatın tadını çıkarıyoruz!"],
   ["celebi", "Bugün de şıklığımızla geldik. İnsan kendine bakmalı!"],
   ["abidin", "Çelebi, sen kendini biraz fazla beğeniyorsun. Yakışıklılık konusunda benimle yarışamazsın!"],
-  ["celebi", "Abidin Abi, senin aynayla aranda özel bir anlaşma mı var?"],
+  ["celebi", "Abidin, senin aynayla aranda özel bir anlaşma mı var?"],
   ["abidin", "Ben aynaya bakmıyorum, ayna bana bakıyor!"],
   ["celebi", "İyi ki kendini beğeniyorsun, yoksa seni kim beğenecek?"],
-  ["abidin", "Çelebi, sen önce benim seviyeme gel, sonra konuşuruz!"],
+  ["abidin", "Çelebi, sen de yakışıklısın, hakkını yemeyelim. Ama birinciliği bana bırak!"],
   ["eynar", "İnsan biraz da ne söylediğine dikkat eder!"],
   ["coskun", "Eynar Abla, seni üzmek bizim ne haddimize? Biz seni sevdiğimizden takılıyoruz!"],
   ["turkan", "Eynar Abla, tamam, bu sefer hepimiz dikkat edeceğiz!"],
@@ -163,11 +163,14 @@ async function sentezle(k, metin) {
   }
 }
 
+const SECILI = (new URLSearchParams(location.search).get("satir") || "").split(",").map(x => +x).filter(x => x > 0);
+if (SECILI.length) { $("hazirla").textContent = `Sadece ${SECILI.join(" ve ")}. replikleri hazırla ve indir`; SATIRLAR.forEach((_, i) => { if (!SECILI.includes(i + 1)) $("s" + i).style.opacity = .35; }); }
 $("hazirla").onclick = async () => {
   const btn = $("hazirla"); btn.disabled = true; $("ilerleme").hidden = false;
   const zip = new JSZip(); const kayit = [];
   try {
     for (let i = 0; i < SATIRLAR.length; i++) {
+      if (SECILI.length && !SECILI.includes(i + 1)) continue;
       const [k, m] = SATIRLAR[i];
       durum(`Hazırlanıyor: ${i + 1} / ${SATIRLAR.length} (${ROLLER[k].ad})`); $("ilerleme").value = i / SATIRLAR.length;
       const { bayt, ses } = await sentezle(k, m);
@@ -178,8 +181,8 @@ $("hazirla").onclick = async () => {
     zip.file("satirlar.json", JSON.stringify(kayit, null, 1));
     durum("ZIP dosyası hazırlanıyor…"); $("ilerleme").value = 1;
     const blob = await zip.generateAsync({ type: "blob" });
-    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "bahar-evi-sesler.zip"; document.body.appendChild(a); a.click(); a.remove();
-    durum("Hazır. İnen bahar-evi-sesler.zip dosyasını sohbete ekleyin.");
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = SECILI.length ? "bahar-evi-duzeltme.zip" : "bahar-evi-sesler.zip"; document.body.appendChild(a); a.click(); a.remove();
+    durum(`Hazır. İnen ${SECILI.length ? "bahar-evi-duzeltme.zip" : "bahar-evi-sesler.zip"} dosyasını sohbete ekleyin.`);
   } catch (e) { durum(e.message, true); }
   btn.disabled = false;
 };
