@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bahar Evi Seslendirme</title>
+<style>
+  :root { --bg: #f6f3ee; --kart: #fff; --yazi: #1d1b18; --soluk: #6b665e; --vurgu: #c2410c; --cizgi: #e4ddd2; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #171512; --kart: #22201c; --yazi: #f1ece4; --soluk: #a39c90; --vurgu: #fb923c; --cizgi: #36322c; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--yazi); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 20px 16px 60px; }
+  h1 { font-size: 24px; margin: 4px 0 2px; }
+  .alt { color: var(--soluk); margin: 0 0 18px; }
+  .kart { background: var(--kart); border: 1px solid var(--cizgi); border-radius: 14px; padding: 14px; margin-bottom: 14px; }
+  label { font-weight: 600; display: block; margin-bottom: 6px; }
+  input, select { width: 100%; font: inherit; padding: 9px 10px; border-radius: 9px; border: 1px solid var(--cizgi); background: var(--bg); color: var(--yazi); }
+  .rol { display: grid; grid-template-columns: 1fr 1.4fr auto; gap: 8px; align-items: center; padding: 7px 0; border-top: 1px solid var(--cizgi); }
+  .rol:first-of-type { border-top: 0; }
+  button { font: inherit; font-weight: 600; border: 0; border-radius: 10px; padding: 10px 14px; background: var(--vurgu); color: #fff; cursor: pointer; }
+  button.ikincil { background: transparent; color: var(--vurgu); border: 1px solid var(--vurgu); padding: 7px 10px; }
+  button:disabled { opacity: .5; cursor: default; }
+  .buyuk { width: 100%; padding: 14px; font-size: 18px; margin-top: 4px; }
+  #durum { margin-top: 10px; min-height: 24px; }
+  .hata { color: #dc2626; }
+  progress { width: 100%; height: 10px; }
+  ol { padding-left: 22px; margin: 0; } li { margin: 4px 0; } li small { color: var(--soluk); }
+  li.tamam::marker { color: #16a34a; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Bahar Evi seslendirme</h1>
+  <p class="alt">Filmdeki bütün replikleri Google sesleriyle hazırlar ve tek bir ZIP dosyası olarak indirir. İndirdiğiniz ZIP'i sohbete ekleyin.</p>
+
+  <div class="kart">
+    <label for="anahtar">Google Cloud API anahtarı</label>
+    <input id="anahtar" type="password" autocomplete="off" placeholder="Parsel video sayfasındaki anahtar otomatik gelir">
+  </div>
+
+  <div class="kart">
+    <label>Karakter sesleri</label>
+    <div id="roller"></div>
+  </div>
+
+  <div class="kart">
+    <button id="hazirla" class="buyuk">Bütün sesleri hazırla ve indir</button>
+    <progress id="ilerleme" value="0" max="1" hidden></progress>
+    <div id="durum"></div>
+  </div>
+
+  <div class="kart">
+    <label>Replikler</label>
+    <ol id="liste"></ol>
+  </div>
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const sakla = { oku(k, v) { try { return localStorage.getItem("pv." + k) ?? v; } catch (e) { return v; } }, yaz(k, v) { try { localStorage.setItem("pv." + k, v); } catch (e) { } } };
+
+// Chirp 3 HD sesleri (doğal), olmazsa WaveNet yedeği
+const ERKEK = ["Charon", "Puck", "Fenrir", "Achird", "Sadachbia", "Algieba", "Iapetus", "Orus", "Umbriel", "Schedar", "Enceladus", "Algenib", "Rasalgethi", "Alnilam", "Sadaltager", "Zubenelgenubi"];
+const KADIN = ["Kore", "Despina", "Sulafat", "Gacrux", "Aoede", "Leda", "Achernar", "Autonoe", "Callirrhoe", "Erinome", "Laomedeia", "Pulcherrima", "Vindemiatrix", "Zephyr"];
+const ROLLER = {
+  haldun:   { ad: "Haldun Başkan", ses: "Charon",    hiz: 0.9,  cins: "E", yedek: ["tr-TR-Wavenet-B", -3] },
+  abidin:   { ad: "Abidin Abi",    ses: "Puck",      hiz: 1.0,  cins: "E", yedek: ["tr-TR-Wavenet-E", 0] },
+  celebi:   { ad: "Çelebi Abi",    ses: "Fenrir",    hiz: 1.0,  cins: "E", yedek: ["tr-TR-Wavenet-C", 0] },
+  bektas:   { ad: "Bektaş Abi",    ses: "Achird",    hiz: 0.97, cins: "E", yedek: ["tr-TR-Wavenet-B", 1] },
+  coskun:   { ad: "Coşkun",        ses: "Sadachbia", hiz: 1.02, cins: "E", yedek: ["tr-TR-Wavenet-E", 2] },
+  turkan:   { ad: "Türkan Başkan", ses: "Kore",      hiz: 1.02, cins: "K", yedek: ["tr-TR-Wavenet-A", 0] },
+  eynar:    { ad: "Eynar Abla",    ses: "Despina",   hiz: 0.97, cins: "K", yedek: ["tr-TR-Wavenet-D", 0] },
+  anlatici: { ad: "Anlatıcı",      ses: "Algieba",   hiz: 0.88, cins: "E", yedek: ["tr-TR-Wavenet-C", -2] },
+};
+const SATIRLAR = [
+  ["turkan", "Bir dakika, bir dakika! Her şeyi böyle kafanıza göre yapamazsınız. Önce herkesin fikrini alalım!"],
+  ["haldun", "Türkan Başkan, daha etkinlik başlamadan muhalefete başladın!"],
+  ["turkan", "Ben söylemezsem kim söyleyecek? Her şey usulüne uygun olsun!"],
+  ["coskun", "Türkan Başkan, senin itirazın olmadan burada hiçbir işin tadı çıkmıyor!"],
+  ["turkan", "Sen de önce biraz uslu dur Coşkun!"],
+  ["abidin", "Coşkun, senin hiç ciddi olduğun bir an yok mu?"],
+  ["coskun", "Abi, hayat zaten yeterince ciddi. Biraz da gülelim!"],
+  ["celebi", "Sen yine kime takılacaksın bakalım?"],
+  ["coskun", "Kim denk gelirse! Ama kimse alınmasın, sevgimizden yapıyoruz!"],
+  ["coskun", "Başkanım, bugün biraz itiraz kotanızı doldurduk mu?"],
+  ["turkan", "Senin şaka kotan hiç dolmuyor galiba!"],
+  ["eynar", "Bektaş Abi, sen bugün kaçıncı tabağı bitirdin?"],
+  ["bektas", "Abla, insan Bahar Evi'nde aç mı kalır? Hem hepsinin tadına bakmak lazım!"],
+  ["abidin", "Bektaş, sen buraya etkinliğe mi geldin, yemek yemeye mi?"],
+  ["bektas", "İkisi bir arada olmaz mı? Hayatın tadını çıkarıyoruz!"],
+  ["celebi", "Bugün de şıklığımızla geldik. İnsan kendine bakmalı!"],
+  ["abidin", "Çelebi, sen kendini biraz fazla beğeniyorsun. Yakışıklılık konusunda benimle yarışamazsın!"],
+  ["celebi", "Abidin Abi, senin aynayla aranda özel bir anlaşma mı var?"],
+  ["abidin", "Ben aynaya bakmıyorum, ayna bana bakıyor!"],
+  ["celebi", "İyi ki kendini beğeniyorsun, yoksa seni kim beğenecek?"],
+  ["abidin", "Çelebi, sen önce benim seviyeme gel, sonra konuşuruz!"],
+  ["eynar", "İnsan biraz da ne söylediğine dikkat eder!"],
+  ["coskun", "Eynar Abla, seni üzmek bizim ne haddimize? Biz seni sevdiğimizden takılıyoruz!"],
+  ["turkan", "Eynar Abla, tamam, bu sefer hepimiz dikkat edeceğiz!"],
+  ["eynar", "İyi, öyle olsun bakalım!"],
+  ["haldun", "Vallahi sizi bir arada tutmak da ayrı bir marifet!"],
+  ["coskun", "Haldun Başkanım, sen bizi idare ediyorsun, biz de seni biraz eğlendiriyoruz!"],
+  ["abidin", "Biraz mı? Coşkun tek başına hepimizi yoruyor!"],
+  ["abidin", "Haldun Başkanım, Hüseyin Başkan ne zaman geliyor?"],
+  ["haldun", "E Abidincim, kolay mı? Bugün Adalet Bakanı oldu. Devir teslim var. Çıkar çıkmaz hemen buraya gelecek."],
+  ["abidin", "Maşallah! Ne güzel haber! Hepimiz onunla gurur duyuyoruz. Yolunu gözlüyoruz."],
+  ["haldun", "Hepimizin sevinci, hepimizin gururu. İnşallah birlikte daha nice güzel günler göreceğiz."],
+  ["turkan", "Bu defa söyleyecek hiçbir itirazım yok. Böyle güzel bir başarı hepimizi mutlu eder!"],
+  ["coskun", "Başkanımız gelsin de hep birlikte güzel bir kutlama yapalım!"],
+  ["anlatici", "Bahar Evi..."],
+  ["anlatici", "Bazen bir tebessüm, bazen bir dost eli, bazen birlikte içilen bir kahve..."],
+  ["anlatici", "Her yaştan insanın kendine yer bulduğu, dostluğun ve dayanışmanın büyüdüğü bir yaşam alanı."],
+  ["anlatici", "Burada herkesin bir hikâyesi, herkesin bir hatırası, herkesin bir yeri var."],
+  ["anlatici", "Çünkü en güzel başarılar, birlikte paylaşıldığında daha anlamlıdır."],
+  ["anlatici", "Bahar Evi'nde hayat güzel, dostluk daim olsun!"],
+];
+
+// roller arayüzü
+const secim = {};
+for (const [k, r] of Object.entries(ROLLER)) {
+  const satir = document.createElement("div"); satir.className = "rol";
+  const liste = r.cins === "K" ? KADIN : ERKEK;
+  const kayitli = sakla.oku("bahar." + k, r.ses);
+  satir.innerHTML = `<div>${r.ad}</div><select>${liste.map(s => `<option ${s === kayitli ? "selected" : ""}>${s}</option>`).join("")}</select><button class="ikincil">Dinle</button>`;
+  const sel = satir.querySelector("select"); secim[k] = sel;
+  sel.onchange = () => sakla.yaz("bahar." + k, sel.value);
+  satir.querySelector("button").onclick = async () => {
+    try { durum(`${r.ad} sesi deneniyor…`); const { bayt } = await sentezle(k, ornekCumle(k)); cal(bayt); durum(""); } catch (e) { durum(e.message, true); }
+  };
+  $("roller").appendChild(satir);
+}
+const ornekCumle = k => (SATIRLAR.find(s => s[0] === k) || [k, "Merhaba, Bahar Evi'ne hoş geldiniz."])[1];
+SATIRLAR.forEach(([k, m], i) => { const li = document.createElement("li"); li.id = "s" + i; li.innerHTML = `<b>${ROLLER[k].ad}:</b> ${m}`; $("liste").appendChild(li); });
+$("anahtar").value = sakla.oku("sesAnahtar", "");
+
+function durum(m, hata) { $("durum").textContent = m; $("durum").className = hata ? "hata" : ""; }
+function cal(bayt) { new Audio(URL.createObjectURL(new Blob([bayt], { type: "audio/mpeg" }))).play(); }
+
+async function istek(anahtar, govde) {
+  let y;
+  try {
+    y = await fetch(`https://texttospeech.googleapis.com/v1/text:synthesize?key=${encodeURIComponent(anahtar)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(govde) });
+  } catch (e) { throw new Error("Ses servisine ulaşılamadı. İnternet bağlantısını kontrol edin."); }
+  const j = await y.json().catch(() => ({}));
+  if (!y.ok) { const err = new Error((j.error && j.error.message) || ("Hata " + y.status)); err.kod = y.status; throw err; }
+  const bin = atob(j.audioContent); const b = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) b[i] = bin.charCodeAt(i); return b;
+}
+async function sentezle(k, metin) {
+  const anahtar = $("anahtar").value.trim();
+  if (!anahtar) throw new Error("Önce Google API anahtarını girin.");
+  sakla.yaz("sesAnahtar", anahtar);
+  const r = ROLLER[k], ad = "tr-TR-Chirp3-HD-" + secim[k].value;
+  const cfg = { audioEncoding: "MP3", sampleRateHertz: 44100 };
+  try { return { bayt: await istek(anahtar, { input: { text: metin }, voice: { languageCode: "tr-TR", name: ad }, audioConfig: { ...cfg, speakingRate: r.hiz } }), ses: ad }; }
+  catch (e) {
+    if (e.kod === 401 || e.kod === 403) throw new Error("Anahtar reddedildi: " + e.message);
+    try { return { bayt: await istek(anahtar, { input: { text: metin }, voice: { languageCode: "tr-TR", name: ad }, audioConfig: cfg }), ses: ad }; }
+    catch (e2) {
+      if (e2.kod === 401 || e2.kod === 403) throw new Error("Anahtar reddedildi: " + e2.message);
+      const [yad, perde] = r.yedek;
+      return { bayt: await istek(anahtar, { input: { text: metin }, voice: { languageCode: "tr-TR", name: yad }, audioConfig: { ...cfg, speakingRate: r.hiz, pitch: perde } }), ses: yad };
+    }
+  }
+}
+
+$("hazirla").onclick = async () => {
+  const btn = $("hazirla"); btn.disabled = true; $("ilerleme").hidden = false;
+  const zip = new JSZip(); const kayit = [];
+  try {
+    for (let i = 0; i < SATIRLAR.length; i++) {
+      const [k, m] = SATIRLAR[i];
+      durum(`Hazırlanıyor: ${i + 1} / ${SATIRLAR.length} (${ROLLER[k].ad})`); $("ilerleme").value = i / SATIRLAR.length;
+      const { bayt, ses } = await sentezle(k, m);
+      const ad = String(i + 1).padStart(2, "0") + "_" + k + ".mp3";
+      zip.file(ad, bayt); kayit.push({ no: i + 1, rol: k, ad: ROLLER[k].ad, metin: m, ses, dosya: ad });
+      $("s" + i).className = "tamam";
+    }
+    zip.file("satirlar.json", JSON.stringify(kayit, null, 1));
+    durum("ZIP dosyası hazırlanıyor…"); $("ilerleme").value = 1;
+    const blob = await zip.generateAsync({ type: "blob" });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "bahar-evi-sesler.zip"; document.body.appendChild(a); a.click(); a.remove();
+    durum("Hazır. İnen bahar-evi-sesler.zip dosyasını sohbete ekleyin.");
+  } catch (e) { durum(e.message, true); }
+  btn.disabled = false;
+};
+</script>
+</body>
+</html>
