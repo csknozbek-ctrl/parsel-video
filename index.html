@@ -102,7 +102,7 @@
     <label for="ilce">İlçe</label><select id="ilce"></select>
     <label for="mah">Mahalle / köy</label><select id="mah"></select>
     <div class="iki">
-      <div><label for="ada">Ada</label><input id="ada" inputmode="numeric" autocomplete="off" placeholder="örn. 1234"></div>
+      <div><label for="ada">Ada</label><input id="ada" inputmode="numeric" autocomplete="off" placeholder="yoksa boş bırakın"></div>
       <div><label for="parsel">Parsel</label><input id="parsel" inputmode="numeric" autocomplete="off" placeholder="örn. 5"></div>
     </div>
     <button type="button" id="onizle" class="ikincil">Parseli haritada göster</button>
@@ -260,11 +260,14 @@ async function tkgmListe(yol) {
   const d = await tkgm(yol);
   return d.features.map(f => f.properties).sort((a, b) => a.text.localeCompare(b.text, "tr"));
 }
+const adasiz = ada => !String(ada || "").trim() || /^0+$/.test(String(ada).trim());   // köy ve eski kayıtlarda ada yoktur; TKGM bunları "ada 0" diye tutar
+const apYaz = (ada, parsel) => adasiz(ada) ? `${parsel} parsel` : `${ada} ada ${parsel} parsel`;   // "123 ada 4 parsel" ya da sadece "4 parsel"
+const apKisa = (ada, parsel) => adasiz(ada) ? `${parsel} parsel` : `${ada}/${parsel}`;
 async function parselGetir(mahId, ada, parsel, mahAd) {
   let v;
   try { v = await getir(`${TKGM}/parsel/${mahId}/${encodeURIComponent(ada)}/${encodeURIComponent(parsel)}`, TKGM_AYAR, 25000, 1); }
   catch (e) {   // "bulunamadı" yalnızca TKGM gerçekten yok dediğinde söylenir; bağlantı sorunu ayrı bildirilir
-    if (e.durum === 404) throw new Error(`${mahAd ? mahAd + ", " : ""}${ada} ada ${parsel} parsel TKGM'de bulunamadı. Mahalleyi, ada ve parsel numarasını kontrol edin.`);
+    if (e.durum === 404) throw new Error(`${mahAd ? mahAd + ", " : ""}${apYaz(ada, parsel)} TKGM'de bulunamadı. Mahalleyi, ada ve parsel numarasını kontrol edin.`);
     if (e.durum === 403 || e.durum === 429) throw new Error("TKGM şu an sorguyu kabul etmiyor (günlük sorgu sınırı dolmuş olabilir). Bir süre sonra tekrar deneyin.");
     throw new Error(`TKGM'den parsel alınamadı (${e.message}). İnternet bağlantısını kontrol edip tekrar deneyin.`);
   }
@@ -782,7 +785,7 @@ function hud(t) {
   }
   kutuCiz(basX, basY, basW, basH, 1.8 * u, "rgba(12,16,22,.86)");
   kutuCiz(basX, basY, 1.1 * u, basH, 0.55 * u, "#ff3b30");
-  yaz(5 * u, 800); ctx.fillStyle = "#fff"; ctx.fillText(sigdir(`${p.mahalle} · ${p.ada} ada ${p.parsel} parsel`, basW - 5.5 * u), basX + 3.2 * u, basY + 2 * u);
+  yaz(5 * u, 800); ctx.fillStyle = "#fff"; ctx.fillText(sigdir(`${p.mahalle} · ${apYaz(p.ada, p.parsel)}`, basW - 5.5 * u), basX + 3.2 * u, basY + 2 * u);
   yaz(3.4 * u, 600); ctx.fillStyle = "#d5dbe3"; ctx.fillText(sigdir(`${p.ilce} / ${p.il}` + (p.mevkii ? ` · ${p.mevkii} mevkii` : ""), basW - 5.5 * u), basX + 3.2 * u, basY + 8.2 * u);
   yaz(3.9 * u, 800); ctx.fillStyle = "#ffd24a"; ctx.fillText(sigdir([p.satilik ? "Satılık " + p.satilik + " m²" : "", p.nitelik].filter(Boolean).join(" · "), basW - 5.5 * u), basX + 3.2 * u, basY + 12.7 * u);
 
@@ -799,7 +802,7 @@ function hud(t) {
     const nabiz = 1 + 0.25 * Math.sin(t * 5);
     ctx.globalAlpha = 0.35; ctx.beginPath(); ctx.arc(pc.x, pc.y, 3.2 * u * nabiz, 0, 7); ctx.fillStyle = "#ff3b30"; ctx.fill(); ctx.globalAlpha = 1;
     igne(pc.x, pc.y, "#ff3b30", 1.7 * u);
-    if (S.simdiki < 0 && t >= Z.B[0] + 0.6 && t < Z.O[0]) etiket(pc.x, pc.y, `${p.ada} / ${p.parsel}`, "", "#ff3b30", false, sinir);
+    if (S.simdiki < 0 && t >= Z.B[0] + 0.6 && t < Z.O[0]) etiket(pc.x, pc.y, apKisa(p.ada, p.parsel), "", "#ff3b30", false, sinir);
   }
   // yerler: açılanlar numaralı rozet, o an açılan büyük etiket
   const ozetA = Math.min(yumusak(faz("O", t) / 0.2), 1 - yumusak((faz("O", t) - 0.85) / 0.15));
@@ -874,8 +877,8 @@ function hud(t) {
   if (t >= Z.E[0] + 0.8 && t < Z.G[0]) {
     const a = yumusak((t - Z.E[0] - 0.8) / 0.8) , w = dikey ? W - 2 * kenar : 70 * u, h = 25 * u, x = (W - w) / 2, y0 = altSinir - h - 2 * u;
     ctx.globalAlpha = a; kutuCiz(x, y0, w, h, 2 * u, "rgba(12,16,22,.88)"); ctx.textAlign = "center";
-    yaz(10 * u, 800); ctx.fillStyle = "#ffd24a"; ctx.fillText(p.satilik ? p.satilik + " m²" : `${p.ada} / ${p.parsel}`, W / 2, y0 + 2 * u);
-    yaz(4 * u, 700); ctx.fillStyle = "#fff"; ctx.fillText(sigdir([p.satilik ? "Satılık " + (S.tur || "hisse") : p.nitelik,`${p.ada} ada ${p.parsel} parsel`].filter(Boolean).join(" · "), w - 4 * u), W / 2, y0 + 13.4 * u);
+    yaz(10 * u, 800); ctx.fillStyle = "#ffd24a"; ctx.fillText(p.satilik ? p.satilik + " m²" : apKisa(p.ada, p.parsel), W / 2, y0 + 2 * u);
+    yaz(4 * u, 700); ctx.fillStyle = "#fff"; ctx.fillText(sigdir([p.satilik ? "Satılık " + (S.tur || "hisse") : p.nitelik,apYaz(p.ada, p.parsel)].filter(Boolean).join(" · "), w - 4 * u), W / 2, y0 + 13.4 * u);
     if (S.sehir) { yaz(3.4 * u, 600); ctx.fillStyle = "#d5dbe3";
       ctx.fillText(sigdir(`${S.sehir.etiket}: ` + (S.yolBilgi ? `arabayla ${S.yolBilgi.dk} dk` : mesafeYazi(S.sehirM) + " (kuş uçuşu)"), w - 4 * u), W / 2, y0 + 19.2 * u); }
     ctx.textAlign = "left"; ctx.globalAlpha = 1;
@@ -929,7 +932,7 @@ function hud(t) {
     yaz(9.4 * u, 800); ctx.fillStyle = "#9a6f12"; ctx.fillText(sigdir(k.tel || "", w - 6 * u), W / 2, y0 + 24.5 * u);
     ctx.fillStyle = "#c8a24a"; ctx.fillRect(W / 2 - 14 * u, y0 + 37.5 * u, 28 * u, 0.4 * u);
     yaz(3.5 * u, 700); ctx.fillStyle = "#10161d";
-    ctx.fillText(sigdir(`${p.mahalle} ${p.ada}/${p.parsel}` + (p.satilik ? ` · ${p.satilik} m² satılık` : ""), w - 6 * u), W / 2, y0 + 40.5 * u);
+    ctx.fillText(sigdir(`${p.mahalle} ${apKisa(p.ada, p.parsel)}` + (p.satilik ? ` · ${p.satilik} m² satılık` : ""), w - 6 * u), W / 2, y0 + 40.5 * u);
     yaz(3.1 * u, 500); ctx.fillStyle = "#5a6573"; ctx.fillText("Bilgi ve yer gösterme için arayın", W / 2, y0 + 46 * u);
     const altSatir = [k.yetki ? "Yetki belgesi " + k.yetki : "", k.ilan ? k.ilan.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "") : ""].filter(Boolean).join("  ·  ");
     if (altSatir) { yaz(2.8 * u, 600); ctx.fillStyle = "#3c4653"; ctx.fillText(sigdir(altSatir, w - 6 * u), W / 2, y0 + 51.5 * u); }
@@ -995,7 +998,7 @@ function onizGoster(p, mahAd, ekNot) {
   } else $("onizHarita").hidden = true;
   const alan = p.alan ? `${Number(String(p.alan).replace(/\./g, "").replace(",", ".")).toLocaleString("tr-TR")} m²` : "";
   const b = $("onizBilgi"); b.className = "";
-  b.innerHTML = `<span class="basari">✓ Parsel bulundu</span><br>${esc([mahAd || p.mahalle, `${p.ada} ada ${p.parsel} parsel`].filter(Boolean).join(" · "))}<br>${esc([alan, p.nitelik, p.mevkii ? p.mevkii + " mevkii" : ""].filter(Boolean).join(" · "))}` + (ekNot ? `<br>${esc(ekNot)}` : "");
+  b.innerHTML = `<span class="basari">✓ Parsel bulundu</span><br>${esc([mahAd || p.mahalle, apYaz(p.ada, p.parsel)].filter(Boolean).join(" · "))}<br>${esc([alan, p.nitelik, p.mevkii ? p.mevkii + " mevkii" : ""].filter(Boolean).join(" · "))}` + (ekNot ? `<br>${esc(ekNot)}` : "");
 }
 async function onizle() {
   if (onizCalisiyor) return;
@@ -1049,7 +1052,7 @@ async function mahalleTara() {   // parsel seçili mahallede yoksa ilçenin diğ
     catch (e) { onizYaz(e.message, true); }
   } else if (engel) onizYaz("TKGM şu an sorguyu kabul etmiyor (günlük sorgu sınırı dolmuş olabilir). Mahalleyi elle seçip tekrar deneyin.", true);
   else if (bakilamayan.length) { onizYaz(`TKGM ${bakilamayan.length} mahalle için cevap vermedi; parsel bunlardan birinde olabilir. Biraz sonra “İlçenin diğer mahallelerinde ara”ya tekrar basın.`, true); $("mahAra").hidden = false; }
-  else onizYaz(`${ada} ada ${parsel} parsel bu ilçenin hiçbir mahallesinde bulunamadı. Ada/parsel numarasını ya da ilçeyi kontrol edin.`, true);
+  else onizYaz(`${apYaz(ada, parsel)} bu ilçenin hiçbir mahallesinde bulunamadı. Ada/parsel numarasını ya da ilçeyi kontrol edin.`, true);
   } finally { onizCalisiyor = false; }
 }
 /* ---------------- Yeni ilan: önceki ilanın bilgileri temizlenir (kartvizit, ses anahtarı ve konum seçimi kalır) ---------------- */
@@ -1197,7 +1200,7 @@ const SES_SESI = "tr-TR-Wavenet-D";   // başka bir Türkçe ses denemek için y
 function mesafeSoz(m) { return m < 950 ? `${Math.round(m / 10) * 10} metre` : `${(m / 1000).toFixed(1).replace(".", ",")} kilometre`; }
 function seslendirmeSatirlari() {   // her satır: videonun hangi saniyesinde başlayacağı ve metni
   const p = S.p, Z = S.Z, satir = [];
-  satir.push({ at: 0.4, metin: `${p.mahalle}, ${p.ada} ada, ${p.parsel} parsel.` });
+  satir.push({ at: 0.4, metin: adasiz(p.ada) ? `${p.mahalle}, ${p.parsel} parsel.` : `${p.mahalle}, ${p.ada} ada, ${p.parsel} parsel.` });
   if (S.sehir) satir.push({ at: Z.A[0] + 0.3, metin: `${S.sehir.ad} ile ${turYer()[0]} arası ${S.yolBilgi ? `arabayla yaklaşık ${S.yolBilgi.dk} dakika` : mesafeSoz(S.sehirM) + " kuş uçuşu"}.` });
   S.yerler.forEach((y, i) => satir.push({ at: Z.D[0] + i * S.adim + 0.15, metin: `${y.ad}, ${mesafeSoz(y.m)}.` }));
   satir.push({ at: Z.E[0] + 0.9, metin: satilikCumle(S.yapi, p.satilik, S.tur) });
@@ -1421,7 +1424,7 @@ function kaydet() {
   kayitci.onstop = () => {
     if (!parcalar.length) { dugmeKilit(false); $("bilgi").textContent = "Kayıt boş çıktı. “Kaydet”e yeniden basın."; return; }
     const uzanti = tur.includes("mp4") ? "mp4" : "webm";
-    const ad = `${trHarf(S.p.mahalle)}_${S.p.ada}_${S.p.parsel}.${uzanti}`.replace(/[^\w.\-]+/g, "_");
+    const ad = `${trHarf(S.p.mahalle)}_${adasiz(S.p.ada) ? "" : S.p.ada + "_"}${S.p.parsel}.${uzanti}`.replace(/[^\w.\-]+/g, "_");
     sonVideo = new File(parcalar, ad, { type: tur.split(";")[0] });
     $("bIndir").hidden = false;
     $("bPaylas").hidden = !(navigator.canShare && navigator.canShare({ files: [sonVideo] }));
@@ -1620,8 +1623,9 @@ function trKonum(s) {   // konum metnini karşılaştırmaya hazırlar; "mahalle
   return trHarf(s).replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
 }
 function adAcik(o, metin) {   // "Çankaya mahallesi", "Sancak köyü": listedeki ad, kendi türünün sözcüğünün hemen önünde mi
-  const ad = adSade(o.text), koy = / koy(u)?$/.test(trKonum(o.text));   // TKGM'de "… KÖYÜ" yazan kayıt köydür
-  return !!ad && new RegExp(`(^| )${ad} ${koy ? "(koyu|koy)" : "(mahallesi|mahalle|mah|mh)"}( |$)`).test(trKonum(metin));
+  const tt = trKonum(o.text), ad = adSade(o.text), koy = / koy(u)?$/.test(tt), mahalle = / (mahallesi|mah)$/.test(tt);   // TKGM adında tür yazıyorsa ona uyulur
+  const ek = koy ? "(koyu|koy)" : mahalle ? "(mahallesi|mahalle|mah|mh)" : "(mahallesi|mahalle|mah|mh|koyu|koy)";   // "KARATAŞ" gibi türsüz ada "Karataş köyü" de "Karataş mahallesi" de uyar
+  return !!ad && new RegExp(`(^| )${ad} ${ek}( |$)`).test(trKonum(metin));
 }
 function mahBahsi(metin) {   // metinde bir sözcükten sonra mahalle/köy sözcüğü var mı ("… mahallesi", "… mah.", "… köyü")
   return new RegExp(`[a-z0-9]+ ${MAH_EK}( |$)`).test(trKonum(metin));
@@ -1668,8 +1672,8 @@ async function bolgeListele() {
   $("bolgeKutu").hidden = false; liste.innerHTML = ""; $("bolgeEkle").hidden = true; bolgeSecenekler = [];
   bilgi.textContent = "Konum okunuyor…";
   const t = talimatCoz($("talimat").value);
-  const ada = t.ada || $("ada").value.trim(), parsel = t.parsel || $("parsel").value.trim();
-  if (!ada || !parsel) { bilgi.textContent = "Önce ada ve parseli yazın. Örnek: “Kocatepe mahallesi 123 ada 4 parsel”."; return; }
+  const ada = t.ada || $("ada").value.trim() || "0", parsel = t.parsel || $("parsel").value.trim();   // adası olmayan parselde ada 0
+  if (!parsel) { bilgi.textContent = "Önce parsel numarasını yazın. Örnek: “Kocatepe mahallesi 123 ada 4 parsel” ya da adası yoksa “Karataş köyü 245 parsel”."; return; }
   let konum;
   try { konum = await konumUygula(t); } catch (e) { bilgi.textContent = "İl, ilçe ya da mahalle listesi alınamadı: " + e.message; return; }
   if (!konum.tamam) { bilgi.textContent = konum.mesaj; return; }
@@ -1801,7 +1805,7 @@ async function uret() {
   try { konum = await konumUygula(t); } catch (e) { durum("İl, ilçe ya da mahalle listesi alınamadı: " + e.message, null, true); return; }
   if (!konum.tamam) { durum(konum.mesaj, null, true); return; }
   $("ada").value = ada; $("parsel").value = parsel;
-  durum(`Konum: ${konum.il} / ${konum.ilce} / ${konum.mah} · ${ada} ada ${parsel} parsel` + (konum.uyari ? ` · ${konum.uyari}` : ""));
+  durum(`Konum: ${konum.il} / ${konum.ilce} / ${konum.mah} · ${apYaz(ada, parsel)}` + (konum.uyari ? ` · ${konum.uyari}` : ""));
   if (!sesCtx) sesCtx = new (window.AudioContext || window.webkitAudioContext)();
   sesCtx.resume().catch(() => { });
   const kmlDosya = $("hisseKml").files[0], hisseKoor = $("hisseKoor").value;
