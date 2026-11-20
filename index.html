@@ -79,7 +79,8 @@
   <label for="il">İl</label><select id="il"><option>Yükleniyor…</option></select>
   <label for="ilce">İlçe</label><select id="ilce"></select>
   <label for="mah">Mahalle / köy</label><select id="mah"></select>
-  <button type="button" id="haritaAc" class="ikincil">Haritadan başlangıç seç</button>
+  <button type="button" id="haritaAc" class="ikincil">Haritadan başlangıç seç (isteğe bağlı)</button>
+  <div class="ipucu">Başlangıç yazmazsanız video doğrudan parselden başlar. Uçuş için talimata örneğin “Başlangıç: Kızılay” ya da “Atakule'den başla” yazın.</div>
   <button type="button" id="bolgeAc" class="ikincil">Bölgedeki konut projeleri ve AVM'leri listele</button>
   <div id="bolgeKutu" class="bolge" hidden>
     <div class="ipucu" id="bolgeBilgi"></div>
@@ -124,7 +125,7 @@
     <div class="ipucu">Video takılırsa HD 720 seçin.</div>
   </details>
   <div class="ipucu">Ana ekrana eklemek için tarayıcı menüsünden “Ana ekrana ekle”yi seçin.</div>
-  <div class="ipucu" id="surum">Sürüm 27</div>
+  <div class="ipucu" id="surum">Sürüm 28</div>
 </div>
 
 <div id="haritaKutu" hidden style="position:fixed;inset:0;z-index:50;background:#0c1016;display:flex;flex-direction:column">
@@ -152,7 +153,7 @@
 "use strict";
 /* ==================================================================
    PARSEL VİDEO — telefonda çalışan sürüm
-   Şehir merkezinden arsaya uçar, çevreyi tek tek gösterir, parsele iner ve durur. Her şey tek bir tuvale çizilir; o tuval kaydedilir.
+   Başlangıç yazıldıysa oradan arsaya uçar, çevreyi tek tek gösterir, parsele iner ve durur. Her şey tek bir tuvale çizilir; o tuval kaydedilir.
    ================================================================== */
 const KART = { firma: "Ankara Arazi Ofisi", isim: "Coşkun Özbek", tel: "0532 382 71 14" };
 const TKGM = "https://cbsapi.tkgm.gov.tr/megsiswebapi.v3/api";
@@ -1170,8 +1171,11 @@ async function hazirla(a, ilerle = () => { }) {
   ilerle("Başlangıç ve yol bulunuyor…", 0.08);
   const kE = baslaKomutuAyikla(a.elle), kC = baslaKomutuAyikla(a.cazibe), kY = baslaKomutuAyikla(a.yol);
   let baslangicNot = "";
-  try { S.sehir = await baslangicBul(yazimDuzelt(kE.ad || kC.ad || kY.ad) || a.baslangic, p.il); }
-  catch (e) { S.sehir = await sehirMerkezi(p.il); baslangicNot = `başlangıç “${kE.ad || kC.ad || kY.ad || a.baslangic}” (şehir merkezinden başlandı)`; }
+  const baslangicYazi = yazimDuzelt(kE.ad || kC.ad || kY.ad) || (a.baslangic || "").trim();   // başlangıç yalnızca talimatta yazılırsa kullanılır
+  if (baslangicYazi) {
+    try { S.sehir = await baslangicBul(baslangicYazi, p.il); }
+    catch (e) { S.sehir = null; baslangicNot = `başlangıç “${baslangicYazi}” (bulunamadı; video parselden başladı)`; }
+  } else S.sehir = null;   // yazılmadıysa uçuş yok: video doğrudan parselden başlar
   if (S.sehir) {
     S.sehirM = mesafeM(S.sehir.lat, S.sehir.lon, p.lat, p.lon);
     S.yolBilgi = S.sehirM > 1500 ? await yolGetir(S.sehir, p) : null;
