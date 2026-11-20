@@ -16,7 +16,7 @@
 <script defer src="https://cdn.jsdelivr.net/npm/cesium@1.147.0/Build/Cesium/Cesium.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800&display=swap" rel="stylesheet">
 <style>
-  :root{--zemin:#0c1016;--kutu:#161c25;--cizgi:#2a3340;--yazi:#f2f4f7;--soluk:#9aa6b5;--altin:#d9b25a;--kirmizi:#ff3b30}
+  :root{--zemin:#0c1016;--kutu:#161c25;--cizgi:#2a3340;--yazi:#f2f4f7;--soluk:#b4bcc8;--altin:#d9b25a;--kirmizi:#ff3b30}
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;background:var(--zemin);color:var(--yazi);
     font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,"DejaVu Sans",Arial,sans-serif;-webkit-text-size-adjust:100%}
@@ -59,6 +59,31 @@
   #harita{position:fixed;left:0;top:0;opacity:0;pointer-events:none;z-index:-1}
   .cesium-viewer-bottom,.cesium-viewer-toolbar{display:none!important}
   #harita .cesium-viewer,#harita .cesium-viewer-cesiumWidgetContainer,#harita .cesium-widget,#harita canvas{width:100%;height:100%;display:block}
+  .ust{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+  .ust h1{margin-top:6px}
+  .kucuk{width:auto;min-height:44px;font-size:15px;font-weight:700;padding:8px 14px;margin-top:8px;background:transparent;white-space:nowrap}
+  .kucuk.uyar{border-color:var(--altin);color:var(--altin)}
+  .adim{margin-top:18px;background:var(--kutu);border:1.5px solid var(--cizgi);border-radius:16px;padding:6px 16px 18px}
+  .adim h2{display:flex;align-items:center;gap:10px;font-size:19px;margin:12px 0 2px}
+  .adim h2 b{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:50%;background:var(--altin);color:#17130a;font-size:16px;flex:none}
+  .adim h2 small{font-size:14px;color:var(--soluk);font-weight:600}
+  .adim select,.adim input,.adim textarea,.adim button{background:var(--zemin)}
+  .adim details{background:transparent}
+  .adim > button,.bolge > button{margin-top:12px}
+  .dosya{display:block;margin:12px 0 0;padding:16px;border:1.5px dashed var(--cizgi);border-radius:12px;color:var(--yazi);font-size:17px;font-weight:700;cursor:pointer}
+  .dosya small{display:block;color:var(--soluk);font-size:14px;font-weight:500;margin-top:4px}
+  .dosya{position:relative}
+  .dosya input{position:absolute;opacity:0;width:1px;height:1px;min-height:0;padding:0;border:0}
+  .dosya span{display:block;margin-top:10px;padding:13px;border:1.5px solid var(--altin);border-radius:12px;text-align:center;color:var(--altin);font-weight:700}
+  .dosya:focus-within span{outline:3px solid var(--altin);outline-offset:1px}
+  .dosya.secili span{background:var(--altin);color:#17130a}
+  input.eksik{border-color:#ff6b61}
+  .kucuk2{min-height:48px;font-size:16px;font-weight:600;margin-top:10px}
+  @media(min-width:700px){#form{max-width:760px}}
+  #onizHarita{height:300px;border-radius:12px;margin-bottom:10px;background:#0a0d12}
+  #onizBilgi{font-size:16px;color:var(--yazi);line-height:1.45}
+  #onizBilgi.hata{color:#ff8a80}
+  .basari{color:#7fe3a0;font-weight:700}
   [hidden]{display:none!important}
 </style>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
@@ -66,47 +91,61 @@
 </head>
 <body>
 <div id="form">
-  <h1>Parsel Video</h1>
-  <div class="alt" id="formMarka"></div>
+  <div class="ust">
+    <div><h1>Parsel Video</h1><div class="alt" id="formMarka"></div></div>
+    <button type="button" id="yeniIlan" class="kucuk">Yeni ilan</button>
+  </div>
 
-  <label for="talimat">Talimat paneli</label>
-  <textarea id="talimat" rows="10" autocomplete="off" placeholder="Örnek: Ankara Çankaya Kocatepe mahallesi 123 ada 4 parsel. Simpaş'tan başla. Önemli yerler: Sinpaş, Park Oran, Panora. Cazibe: Ankara Kalesi, Atakule. Yollar: Çevre Yolu. Vurgu: Yatırım fırsatı. Seslendirme: Bu bölge hızla gelişiyor."></textarea>
-  <div class="ipucu">En kısa hali: <b>“Kocatepe mahallesi 123 ada 4 parsel”</b>. Gerisi isteğe bağlıdır; ilan ekran görüntüsü eklerseniz bilgileri kendisi doldurur.</div>
+  <section class="adim">
+    <h2><b>1</b> Parsel</h2>
+    <label for="il">İl</label><select id="il"><option>Yükleniyor…</option></select>
+    <label for="ilce">İlçe</label><select id="ilce"></select>
+    <label for="mah">Mahalle / köy</label><select id="mah"></select>
+    <div class="iki">
+      <div><label for="ada">Ada</label><input id="ada" inputmode="numeric" autocomplete="off" placeholder="örn. 1234"></div>
+      <div><label for="parsel">Parsel</label><input id="parsel" inputmode="numeric" autocomplete="off" placeholder="örn. 5"></div>
+    </div>
+    <button type="button" id="onizle" class="ikincil">Parseli haritada göster</button>
+    <div id="onizKutu" class="bolge" hidden>
+      <div id="onizHarita"></div>
+      <div id="onizBilgi" role="status" aria-live="polite"></div>
+      <button type="button" id="mahAra" class="ikincil" hidden>İlçenin diğer mahallelerinde ara</button>
+    </div>
+  </section>
+
+  <section class="adim">
+    <h2><b>2</b> İlan <small>isteğe bağlı</small></h2>
+    <label class="dosya" for="ilanGoruntu">İlan açıklaması ekran görüntüleri<small>Metrekare, fiyat ve çevredeki yerler otomatik okunur.</small>
+      <input type="file" id="ilanGoruntu" accept="image/*" multiple><span data-bos="Ekran görüntüsü seç">Ekran görüntüsü seç</span></label>
+    <label class="dosya" for="fotolar">İlan fotoğrafları<small>En çok 6 fotoğraf videoda gösterilir.</small>
+      <input type="file" id="fotolar" accept="image/*" multiple><span data-bos="Fotoğraf seç">Fotoğraf seç</span></label>
+    <details id="ilanBolum">
+      <summary>İlan metnini yapıştır</summary>
+      <textarea id="ilanMetin" rows="5" autocomplete="off" placeholder="İlan sayfasındaki yazıyı kopyalayıp buraya yapıştırın"></textarea>
+      <button type="button" id="ilanEkle" class="ikincil">İlan bilgilerini talimata ekle</button>
+    </details>
+  </section>
+
+  <section class="adim">
+    <h2><b>3</b> Videoda neler vurgulansın? <small>isteğe bağlı</small></h2>
+    <textarea id="talimat" rows="6" autocomplete="off" aria-label="Talimat" placeholder="Örnek: Önemli yerler: Sinpaş, Park Oran, Panora. Cazibe: Ankara Kalesi, Atakule. Yollar: Çevre Yolu. Başlangıç: Kızılay. Vurgu: Yatırım fırsatı."></textarea>
+    <div class="ipucu">Boş bırakabilirsiniz. Başlangıç yazmazsanız video doğrudan parselden başlar.</div>
   <details id="yardim">
     <summary>Talimat nasıl yazılır?</summary>
     <div class="ipucu">Tüm talimatları buraya yazın. Başlıklar isteğe bağlı: <b>Satılık:</b> 300 · <b>Yapı:</b> enlem, boylam · <b>Biçim:</b> dikey/yatay · <b>Süre:</b> uzun/kısa · <b>İlan:</b> link · <b>Yetki:</b> numara · <b>Firma / Ad / Tel:</b> kartvizit · <b>Önemli yerler:</b> / <b>Çevre bilgisi:</b> · <b>Cazibe:</b> / <b>Yollar:</b> / <b>Otoyol:</b> · <b>Hastaneler, Parklar, AVM'ler, Okullar, Metro, Camiler, Marketler, Eczaneler:</b> adsız yazarsanız arsaya en yakınları bulunur; adet için “Hastaneler: 3” yazın · <b>İmar:</b> · <b>Doğa:</b> · <b>Seslendirme:</b> (okunur) · <b>Vurgu:</b> (ekranda). Ada ve parseli “123 ada 4 parsel” diye yazın; “Simpaş'tan başla” yazarsanız video o yerden başlar. Yazdığınız yerlerin hepsi videoya girer; yazmadıklarınızdan en yakın yerler eklenir. Bölgedeki konut projelerini ve AVM'leri listelemek için “Bölgedeki konut projeleri ve AVM'leri listele” düğmesine basın.</div>
   </details>
-  <label for="il">İl</label><select id="il"><option>Yükleniyor…</option></select>
-  <label for="ilce">İlçe</label><select id="ilce"></select>
-  <label for="mah">Mahalle / köy</label><select id="mah"></select>
-  <button type="button" id="haritaAc" class="ikincil">Haritadan başlangıç seç (isteğe bağlı)</button>
-  <div class="ipucu">Başlangıç yazmazsanız video doğrudan parselden başlar. Uçuş için talimata örneğin “Başlangıç: Kızılay” ya da “Atakule'den başla” yazın.</div>
-  <button type="button" id="bolgeAc" class="ikincil">Bölgedeki konut projeleri ve AVM'leri listele</button>
+    <div class="iki"><button type="button" id="haritaAc" class="ikincil kucuk2">📍 Başlangıç seç</button>
+    <button type="button" id="bolgeAc" class="ikincil kucuk2">🏢 Yakın projeler</button></div>
   <div id="bolgeKutu" class="bolge" hidden>
     <div class="ipucu" id="bolgeBilgi"></div>
     <div id="bolgeListe"></div>
     <button type="button" id="bolgeEkle" hidden>İşaretlileri talimata ekle</button>
   </div>
-  <details id="ilanBolum">
-    <summary>İlan bilgileri ve fotoğraflar (isteğe bağlı)</summary>
-    <label for="ilanMetin">İlan metni</label>
-    <textarea id="ilanMetin" rows="5" autocomplete="off" placeholder="İlan sayfasındaki yazıyı kopyalayıp buraya yapıştırın"></textarea>
-    <button type="button" id="ilanEkle" class="ikincil">İlan bilgilerini talimata ekle</button>
-    <label for="ilanGoruntu">İlan açıklaması ekran görüntüleri (metni okur, talimatı doldurur)</label>
-    <input type="file" id="ilanGoruntu" accept="image/*" multiple>
-    <label for="fotolar">İlan fotoğrafları (en çok 6; yazılı görüntüler de okunur)</label>
-    <input type="file" id="fotolar" accept="image/*" multiple>
-  </details>
-  <details id="konumDetay">
-    <summary>Ada ve parsel (talimatta yazılmadıysa)</summary>
-    <div class="iki">
-      <div><label for="ada">Ada</label><input id="ada" inputmode="numeric" autocomplete="off" placeholder="0"></div>
-      <div><label for="parsel">Parsel</label><input id="parsel" inputmode="numeric" autocomplete="off"></div>
-    </div>
-  </details>
+  </section>
+
   <details>
-    <summary>Satılık hisse sınırı (isteğe bağlı)</summary>
-    <label for="hisseKml">KML dosyası</label>
+    <summary>Hisseli satış: satılan kısmın sınırı (isteğe bağlı)</summary>
+    <label for="hisseKml">Google Earth dosyası (KML)</label>
     <input id="hisseKml" type="file" accept=".kml,application/vnd.google-earth.kml+xml">
     <label for="hisseKoor">…ya da köşe koordinatları (her satıra “enlem, boylam”)</label>
     <textarea id="hisseKoor" rows="3" autocomplete="off" placeholder="39.9210, 32.8530"></textarea>
@@ -119,13 +158,13 @@
   <details id="sesDetay">
     <summary>Ses ve kalite</summary>
     <label for="sesAnahtar">Google Cloud API anahtarı (Text-to-Speech)</label><input id="sesAnahtar" type="password" autocomplete="off">
-    <div class="ipucu">Seslendirme için Google Cloud Text-to-Speech API anahtarı gerekir; anahtar yoksa video hazırlanmaz.</div>
+    <div class="ipucu">Anahtar girerseniz video sesli anlatımlı olur. Anahtar yoksa ya da çalışmazsa video müzikli, anlatımsız hazırlanır.</div>
     <label for="kalite">Kalite</label>
     <select id="kalite"><option value="720">HD 720 (hızlı)</option><option value="1080">Full HD 1080</option></select>
     <div class="ipucu">Video takılırsa HD 720 seçin.</div>
   </details>
   <div class="ipucu">Ana ekrana eklemek için tarayıcı menüsünden “Ana ekrana ekle”yi seçin.</div>
-  <div class="ipucu" id="surum">Sürüm 28</div>
+  <div class="ipucu" id="surum">Sürüm 29</div>
 </div>
 
 <div id="haritaKutu" hidden style="position:fixed;inset:0;z-index:50;background:#0c1016;display:flex;flex-direction:column">
@@ -938,6 +977,105 @@ function baslaKomutuAyikla(metin) {   // satırlardan "X'tan başla" komutunu ay
   return { kalan, ad };
 }
 let haritaNesne = null, haritaSecim = null, haritaIsaret = null;
+/* ---------------- Parsel önizleme: video hazırlanmadan önce parsel haritada görülür ---------------- */
+let onizNesne = null, onizKatman = null, onizCalisiyor = false;
+const esc = v => String(v == null ? "" : v).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));   // dışarıdan gelen yazı HTML olarak çalışmasın
+function onizYaz(metin, hata) { const b = $("onizBilgi"); b.className = hata ? "hata" : ""; b.textContent = metin; }   // düz yazı: link ya da TKGM verisi kod çalıştıramaz
+function onizGoster(p, mahAd, ekNot) {
+  $("onizKutu").hidden = false;
+  if (window.L) {
+    $("onizHarita").hidden = false;
+    if (!onizNesne) {
+      onizNesne = L.map("onizHarita", { zoomControl: true, attributionControl: true });
+      L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { maxZoom: 19, attribution: "Esri, Maxar" }).addTo(onizNesne);
+    }
+    if (onizKatman) onizKatman.remove();
+    onizKatman = L.polygon(p.halka.map(k => [k[1], k[0]]), { color: "#ff3b30", weight: 3, fillOpacity: 0.25 }).addTo(onizNesne);
+    setTimeout(() => { onizNesne.invalidateSize(); onizNesne.fitBounds(onizKatman.getBounds(), { padding: [30, 30], maxZoom: 18 }); }, 60);
+  } else $("onizHarita").hidden = true;
+  const alan = p.alan ? `${Number(String(p.alan).replace(/\./g, "").replace(",", ".")).toLocaleString("tr-TR")} m²` : "";
+  const b = $("onizBilgi"); b.className = "";
+  b.innerHTML = `<span class="basari">✓ Parsel bulundu</span><br>${esc([mahAd || p.mahalle, `${p.ada} ada ${p.parsel} parsel`].filter(Boolean).join(" · "))}<br>${esc([alan, p.nitelik, p.mevkii ? p.mevkii + " mevkii" : ""].filter(Boolean).join(" · "))}` + (ekNot ? `<br>${esc(ekNot)}` : "");
+}
+async function onizle() {
+  if (onizCalisiyor) return;
+  const t = talimatCoz($("talimat").value);
+  const ada = t.ada || $("ada").value.trim() || "0", parsel = t.parsel || $("parsel").value.trim();
+  $("onizKutu").hidden = false; $("mahAra").hidden = true; $("onizHarita").hidden = true;
+  if (!parsel) { onizYaz("Önce parsel numarasını yazın.", true); eksikGoster(); return; }
+  onizCalisiyor = true; onizYaz("Parsel aranıyor…");
+  const benimIlan = ilanNo;
+  try {
+    const konum = await konumUygula(t);
+    if (benimIlan !== ilanNo) return;   // bu arada "Yeni ilan"a basıldı
+    if (!konum.tamam) { onizYaz(konum.mesaj, true); return; }
+    $("ada").value = ada; $("parsel").value = parsel;
+    try { onizGoster(await parselGetir($("mah").value, ada, parsel, konum.mah), konum.mah); }
+    catch (e) { onizYaz(e.message, true); if (/bulunamadı/.test(e.message) && mahTum.length > 1) $("mahAra").hidden = false; }
+  } catch (e) { onizYaz("İl, ilçe ya da mahalle listesi alınamadı: " + e.message, true); }
+  finally { onizCalisiyor = false; }
+}
+let mahKilit = null, taraNo = 0, ilanNo = 0;   // mahKilit: taramanın bulduğu mahalle; talimattaki mahalle adı onu ezmez
+async function mahalleTara() {   // parsel seçili mahallede yoksa ilçenin diğer mahallelerinde aranır
+  if (onizCalisiyor) return;
+  const ada = $("ada").value.trim() || "0", parsel = $("parsel").value.trim(), simdiki = $("mah").value;
+  const benim = ++taraNo, ilce0 = $("ilce").value, mahListe0 = mahTum, gecerli = () => benim === taraNo && $("ilce").value === ilce0 && $("mah").value === simdiki;
+  onizCalisiyor = true;
+  try {
+  const liste = mahTum.filter(m => String(m.id) !== simdiki);
+  $("mahAra").hidden = true;
+  let sira = 0, biten = 0, bulunan = null, engel = null;
+  const bakilamayan = [];   // TKGM'nin cevap vermediği mahalleler: "yok" sayılmaz
+  const sor = async m => {   // 200 → var, 404 → yok, meşgul/sınır → bekleyip en çok 3 kez daha dener
+    for (let deneme = 0; deneme < 4; deneme++) {
+      try { const v = await getir(`${TKGM}/parsel/${m.id}/${encodeURIComponent(ada)}/${encodeURIComponent(parsel)}`, TKGM_AYAR, 20000, 0); return v && v.geometry ? "var" : "yok"; }
+      catch (e) { if (e.durum === 404) return "yok"; if (e.durum === 403) return "engel"; if (deneme >= 1 && e.durum !== 429) break; await bekle(1500 * (deneme + 1)); }   // meşgulse bir kez, sınırdaysa en çok 3 kez daha
+    }
+    return "bilinmiyor";
+  };
+  const isci = async () => {
+    while (!bulunan && !engel && sira < liste.length && gecerli()) {
+      const m = liste[sira++], c = await sor(m);
+      if (c === "var") bulunan = bulunan || m; else if (c === "engel") engel = true; else if (c === "bilinmiyor") bakilamayan.push(m.text);
+      biten++; if (!bulunan) onizYaz(`Diğer mahallelerde aranıyor… (${biten}/${liste.length})`);
+      await bekle(250);   // TKGM'yi yormamak için kısa ara
+    }
+  };
+  await Promise.all([1, 2].map(isci));
+  if (!gecerli()) return;   // kullanıcı tarama sırasında ilçe/mahalle değiştirdi ya da yeni ilan açtı: sonuç uygulanmaz
+  if (bulunan) {
+    secenekDoldur($("mah"), mahListe0, bulunan.id); sakla.yaz("mah", bulunan.text); mahKilit = { id: String(bulunan.id), ilce: ilce0 };
+    try { onizGoster(await parselGetir(bulunan.id, ada, parsel, bulunan.text), bulunan.text, `Mahalle “${bulunan.text}” olarak değiştirildi.`); }
+    catch (e) { onizYaz(e.message, true); }
+  } else if (engel) onizYaz("TKGM şu an sorguyu kabul etmiyor (günlük sorgu sınırı dolmuş olabilir). Mahalleyi elle seçip tekrar deneyin.", true);
+  else if (bakilamayan.length) { onizYaz(`TKGM ${bakilamayan.length} mahalle için cevap vermedi; parsel bunlardan birinde olabilir. Biraz sonra “İlçenin diğer mahallelerinde ara”ya tekrar basın.`, true); $("mahAra").hidden = false; }
+  else onizYaz(`${ada} ada ${parsel} parsel bu ilçenin hiçbir mahallesinde bulunamadı. Ada/parsel numarasını ya da ilçeyi kontrol edin.`, true);
+  } finally { onizCalisiyor = false; }
+}
+/* ---------------- Yeni ilan: önceki ilanın bilgileri temizlenir (kartvizit, ses anahtarı ve konum seçimi kalır) ---------------- */
+function eksikGoster() {   // boş parsel kutusu kırmızı çerçeveyle gösterilir
+  const k = $("parsel"); k.classList.add("eksik"); k.scrollIntoView({ behavior: "smooth", block: "center" }); k.focus({ preventScroll: true });
+}
+function dosyaYazisi(id) {   // seçilen görsel sayısı düğmede görünür
+  const g = $(id), sp = g.parentElement.querySelector("span"), n = g.files ? g.files.length : 0;
+  sp.textContent = n ? `✓ ${n} görsel seçildi · değiştir` : sp.dataset.bos; g.parentElement.classList.toggle("secili", !!n);
+}
+let yeniOnayZaman = null;
+function yeniIlan() {
+  const d = $("yeniIlan");
+  if (!yeniOnayZaman) { d.textContent = "Temizlensin mi?"; d.classList.add("uyar"); yeniOnayZaman = setTimeout(() => { yeniOnayZaman = null; d.textContent = "Yeni ilan"; d.classList.remove("uyar"); }, 3500); return; }
+  clearTimeout(yeniOnayZaman); yeniOnayZaman = null; d.textContent = "Yeni ilan"; d.classList.remove("uyar");
+  for (const id of ["talimat", "ilanMetin", "ada", "parsel", "hisseKoor"]) $(id).value = "";
+  for (const id of ["ilanGoruntu", "fotolar", "hisseKml"]) $(id).value = "";
+  dosyaYazisi("ilanGoruntu"); dosyaYazisi("fotolar"); $("parsel").classList.remove("eksik");
+  ocrOkunan.clear(); ocrMetni = ""; mahKilit = null; ilanNo++; taraNo++;
+  if (location.search) history.replaceState(null, "", location.pathname);   // linkten gelen eski ilan bilgisi yenilemede geri gelmesin
+  sakla.yaz("talimat", "");
+  $("onizKutu").hidden = true; $("bolgeKutu").hidden = true; $("bolgeListe").innerHTML = "";
+  if (onizKatman) { onizKatman.remove(); onizKatman = null; }
+  durum("Yeni ilan için form temizlendi.");
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
 function haritaAc() {
   if (!window.L) { durum("Harita yüklenemedi. İnternet bağlantınızı kontrol edin ya da başlangıç noktasını yazın.", null, true); return; }
   $("haritaKutu").hidden = false;
@@ -1507,7 +1645,8 @@ async function konumUygula(t) {   // talimattaki il, ilçe ve mahalle/köyü TKG
   const acik = mahListe.filter(o => metinler.some(m => adAcik(o, m)));
   const bahsi = metinler.some(m => mahBahsi(m));
   const aday = acik.length ? acik : bahsi ? [] : mahListe.filter(o => { const ad = adSade(o.text); return ad !== ilceAd && ad !== ilAd; });
-  const mah = yerBul(aday, metinler);
+  const kilitli = mahKilit && mahKilit.ilce === String(ilceId) ? mahListe.find(o => String(o.id) === mahKilit.id) : null;
+  const mah = kilitli || yerBul(aday, metinler);   // tarama ile bulunan mahalle, talimattaki adın önündedir
   const ekranda = mahListe.some(o => String(o.id) === onceki.mah);   // ekrandaki mahalle bu ilçenin listesinde mi
   if (!mah && bahsi && !ekranda) return { tamam: false, mesaj: "Talimattaki mahalle bu ilçede bulunamadı. Mahalle kutusundan seçin." };
   if (!mah && !ekranda) return { tamam: false, mesaj: "Mahalle ya da köy seçin ya da talimata adını yazın (örnek: “Kocatepe mahallesi 123 ada 4 parsel”)." };
@@ -1518,7 +1657,7 @@ async function konumUygula(t) {   // talimattaki il, ilçe ve mahalle/köyü TKG
   secenekDoldur($("mah"), mahListe, mah ? mah.id : onceki.mah);
   if (!$("mah").value) return { tamam: false, mesaj: "Mahalle ya da köy seçilmedi." };
   const adiOku = s => s.options[s.selectedIndex] ? s.options[s.selectedIndex].textContent : "";
-  const uyari = !mah && bahsi ? `Talimattaki mahalle bu ilçede yok; ekrandaki mahalle kullanıldı (${adiOku($("mah"))}). Yanlışsa talimattaki konum satırını düzeltin.` : "";
+  const uyari = kilitli && acik.length && !acik.includes(kilitli) ? `Talimatta başka mahalle yazıyor; parselin bulunduğu ${kilitli.text} kullanıldı.` : !mah && bahsi ? `Talimattaki mahalle bu ilçede yok; ekrandaki mahalle kullanıldı (${adiOku($("mah"))}). Yanlışsa talimattaki konum satırını düzeltin.` : "";
   return { tamam: true, il: adiOku($("il")), ilce: adiOku($("ilce")), mah: adiOku($("mah")), uyari };
 }
 /* ---------------- Bölge listesi: konut projeleri ve AVM'ler işaretlenir, talimata eklenir ---------------- */
@@ -1615,12 +1754,18 @@ async function formBasla() {
   $("ilce").onchange = () => mahYukle().catch(e => durum("Mahalleler alınamadı: " + e.message, null, true));
   $("basla").onclick = () => { if (!calisiyor) { calistir(); return; } iptalIstendi = true; $("basla").disabled = true; durum("İptal ediliyor…"); };   // çalışırken aynı düğme iptal eder
   $("haritaAc").onclick = haritaAc;
+  $("onizle").onclick = onizle;
+  $("mahAra").onclick = () => mahalleTara().catch(e => onizYaz(e.message, true));
+  $("yeniIlan").onclick = yeniIlan;
+  $("mah").addEventListener("change", () => { $("onizKutu").hidden = true; mahKilit = null; taraNo++; });   // kullanıcı seçimi her şeyin önündedir
+  $("ilce").addEventListener("change", () => { $("onizKutu").hidden = true; mahKilit = null; taraNo++; });
   $("bolgeAc").onclick = bolgeListele;
   $("bolgeEkle").onclick = bolgeEkle;
   $("ilanEkle").onclick = ilanTalimatEkle;
   const ocrHata = e => durum("Ekran görüntüsü okunamadı: " + e.message + " Metni ilan kutusuna elle yapıştırabilirsiniz.", null, true);
-  $("ilanGoruntu").onchange = () => ilanGoruntulerioku().catch(ocrHata);
-  $("fotolar").onchange = () => ilanGoruntulerioku().catch(ocrHata);   // ilan fotoğrafları da okunur: metin bilgileri (m², fiyat, çevre) buradan da alınır
+  $("ilanGoruntu").onchange = () => { dosyaYazisi("ilanGoruntu"); ilanGoruntulerioku().catch(ocrHata); };
+  $("fotolar").onchange = () => { dosyaYazisi("fotolar"); ilanGoruntulerioku().catch(ocrHata); };
+  $("parsel").addEventListener("input", () => $("parsel").classList.remove("eksik"));   // ilan fotoğrafları da okunur: metin bilgileri (m², fiyat, çevre) buradan da alınır
   $("haritaIptal").onclick = () => { $("haritaKutu").hidden = true; };
   $("haritaTamam").onclick = () => { if (!haritaSecim) return; talimatEkle(`Başlangıç: ${haritaSecim.lat.toFixed(5)}, ${haritaSecim.lng.toFixed(5)}`); $("haritaKutu").hidden = true; };
   $("bOynat").onclick = () => { dugmeKilit(true); oynat(() => dugmeKilit(false)); };
@@ -1640,7 +1785,6 @@ async function calistir() {   // aynı anda tek üretim; çalışırken düğme 
 async function uret() {
   if (navigator.onLine === false) { durum("İnternet bağlantısı yok. Bağlantıyı kontrol edip tekrar deneyin.", null, true); return; }
   const sesAnahtar = $("sesAnahtar").value.trim();
-  if (!sesAnahtar) { durum("Seslendirme için Google Cloud API anahtarını girin (“Ses ve kalite” bölümünde).", null, true); $("sesDetay").open = true; $("sesAnahtar").focus(); return; }
   try { await ilanGoruntulerioku(); } catch (e) { durum("Ekran görüntüsü okunamadı: " + e.message + " Video üretilmedi.", null, true); return; }   // okunmamış görüntüler önce okunur
   const t = talimatCoz($("talimat").value);
   const ilanYer = ilanYerleri($("ilanMetin").value);
@@ -1652,7 +1796,7 @@ async function uret() {
   if (!t.ilan) eksik.push("ilan linki");
   if (!t.yetki) eksik.push("yetki belgesi no");
   const ada = t.ada || $("ada").value.trim() || "0", parsel = t.parsel || $("parsel").value.trim();
-  if (!parsel) { durum("Parsel numarasını yazın. Örnek: “Kocatepe mahallesi 123 ada 4 parsel”.", null, true); $("konumDetay").open = true; return; }
+  if (!parsel) { durum("Parsel numarasını yazın. Örnek: “Kocatepe mahallesi 123 ada 4 parsel”.", null, true); eksikGoster(); return; }
   let konum;
   try { konum = await konumUygula(t); } catch (e) { durum("İl, ilçe ya da mahalle listesi alınamadı: " + e.message, null, true); return; }
   if (!konum.tamam) { durum(konum.mesaj, null, true); return; }
@@ -1681,10 +1825,14 @@ async function uret() {
     await Promise.all(["800", "700", "600"].map(w => document.fonts.load(`${w} 40px Inter`))).catch(() => { });
     if (!muzikBuf) muzikBuf = await muzikYukle();   // müzik bir kez indirilir
     await hazirla(a, ilerle);
-    await sesHazirla(sesAnahtar, ilerle);
+    let sesNot = "";   // anahtar yoksa ya da ses servisi çalışmazsa video müzikli, anlatımsız hazırlanır
+    if (sesAnahtar) {
+      try { await sesHazirla(sesAnahtar, ilerle); }
+      catch (e) { if (iptalIstendi) throw e; S.sesler = []; sesNot = ` Seslendirme yapılamadı (${e.message}); video müzikli hazırlandı.`; }
+    } else { S.sesler = []; sesNot = " Ses anahtarı girilmediği için video anlatımsız, müzikli hazırlandı."; }
     await onYukle(ilerle);
     $("form").hidden = true; $("sahne").hidden = false;
-    $("bilgi").textContent = `${Math.round(S.sure)} saniyelik video hazır. “Kaydet” videoyu dosyaya çevirir.` + (S.atlanan && S.atlanan.length ? ` Bulunamayan yerler: ${S.atlanan.join(", ")}.` : "") + (S.duzeltmeler && S.duzeltmeler.length ? ` Yazım düzeltildi: ${S.duzeltmeler.join(", ")}.` : "") + (eksik.length ? ` Talimatta yazılmayanlar: ${eksik.join(", ")}.` : "");
+    $("bilgi").textContent = `${Math.round(S.sure)} saniyelik video hazır. “Kaydet” videoyu dosyaya çevirir.` + (S.atlanan && S.atlanan.length ? ` Bulunamayan yerler: ${S.atlanan.join(", ")}.` : "") + (S.duzeltmeler && S.duzeltmeler.length ? ` Yazım düzeltildi: ${S.duzeltmeler.join(", ")}.` : "") + (eksik.length ? ` Talimatta yazılmayanlar: ${eksik.join(", ")}.` : "") + sesNot;
     durum("");
   }
 }
