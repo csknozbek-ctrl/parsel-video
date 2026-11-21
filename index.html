@@ -18,7 +18,7 @@
 <style>
   :root{--zemin:#0c1016;--kutu:#161c25;--cizgi:#2a3340;--yazi:#f2f4f7;--soluk:#9aa6b5;--altin:#d9b25a;--kirmizi:#ff3b30}
   *{box-sizing:border-box}
-  html,body{margin:0;height:100%;background:var(--zemin);color:var(--yazi);
+  html,body{overscroll-behavior-y:contain;margin:0;height:100%;background:var(--zemin);color:var(--yazi);
     font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,"DejaVu Sans",Arial,sans-serif;-webkit-text-size-adjust:100%}
   #form{max-width:560px;margin:0 auto;padding:calc(18px + env(safe-area-inset-top,0px)) 18px calc(28px + env(safe-area-inset-bottom,0px))}
   h1{font-size:30px;margin:6px 0 2px;letter-spacing:-.01em}
@@ -68,6 +68,11 @@
 <div id="form">
   <h1>Parsel Video</h1>
   <div class="alt" id="formMarka"></div>
+  <div id="sonKutu" class="bolge" hidden>
+    <div class="ipucu" id="sonBilgi"></div>
+    <button type="button" id="sonIndir" class="ikincil">Son videoyu indir</button>
+    <button type="button" id="sonPaylas" class="ikincil" hidden>Son videoyu paylaş</button>
+  </div>
 
   <label for="talimat">Talimat paneli</label>
   <textarea id="talimat" rows="10" autocomplete="off" placeholder="Örnek: Ankara Çankaya Kocatepe mahallesi 123 ada 4 parsel. Simpaş'tan başla. Önemli yerler: Sinpaş, Park Oran, Panora. Cazibe: Ankara Kalesi, Atakule. Yollar: Çevre Yolu. Vurgu: Yatırım fırsatı. Seslendirme: Bu bölge hızla gelişiyor."></textarea>
@@ -125,7 +130,7 @@
     <div class="ipucu">Video takılırsa HD 720 seçin.</div>
   </details>
   <div class="ipucu">Ana ekrana eklemek için tarayıcı menüsünden “Ana ekrana ekle”yi seçin.</div>
-  <div class="ipucu" id="surum">Sürüm 28</div>
+  <div class="ipucu" id="surum">Sürüm 29</div>
 </div>
 
 <div id="haritaKutu" hidden style="position:fixed;inset:0;z-index:50;background:#0c1016;display:flex;flex-direction:column">
@@ -691,6 +696,7 @@ async function ocrCalistir(dosyalar) {   // hata olursa fırlatır; çağıran d
   if (ocrMetni && el.value.includes(ocrMetni)) el.value = el.value.replace(ocrMetni, "");   // önceki okumalar kutuda çoğalmaz
   ocrMetni = [ocrMetni, ...metinler].filter(Boolean).join("\n").trim();
   el.value = [el.value.trim(), ocrMetni].filter(Boolean).join("\n");
+  sakla.yaz("ilanMetin", el.value); sakla.yaz("ocrMetni", ocrMetni); sakla.yaz("ocrOkunan", JSON.stringify([...ocrOkunan]));
   ilanTalimatEkle();
 }
 function ilanTalimatEkle() {   // ilan bilgilerinden talimat satırı üretir; talimatta zaten olan satılık, çevre yerleri ve kategoriler tekrar yazılmaz
@@ -1285,6 +1291,7 @@ function kaydet() {
     const uzanti = tur.includes("mp4") ? "mp4" : "webm";
     const ad = `${trHarf(S.p.mahalle)}_${S.p.ada}_${S.p.parsel}.${uzanti}`.replace(/[^\w.\-]+/g, "_");
     sonVideo = new File(parcalar, ad, { type: tur.split(";")[0] });
+    dosyaDepo.yaz("sonVideo", sonVideo);   // sayfa yenilense de son video kaybolmaz
     $("bIndir").hidden = false;
     $("bPaylas").hidden = !(navigator.canShare && navigator.canShare({ files: [sonVideo] }));
     $("bilgi").textContent = (kayitKesildi ? "Kayıt sırasında ekran kapandı ya da başka uygulamaya geçildi; videoda donma olabilir. Gerekirse “Kaydet”e yeniden basın. " : "")
@@ -1299,6 +1306,32 @@ function dugmeKilit(k) { for (const b of ["bOynat", "bKaydet", "bYeni"]) $(b).di
 
 /* ---------------- Form ---------------- */
 const sakla = { oku(k, v) { try { return localStorage.getItem("pv." + k) ?? v; } catch (e) { return v; } }, yaz(k, v) { try { localStorage.setItem("pv." + k, v); } catch (e) { } } };
+const dosyaDepo = {   // dosyalar (fotoğraf, ekran görüntüsü, KML, son video) telefonun tarayıcı deposunda saklanır
+  db: null,
+  ac() { return this.db || (this.db = new Promise((ok, red) => { const r = indexedDB.open("pv", 1); r.onupgradeneeded = () => r.result.createObjectStore("d"); r.onsuccess = () => ok(r.result); r.onerror = () => red(r.error); })); },
+  async yaz(k, v) { try { const db = await this.ac(); await new Promise((ok, red) => { const t = db.transaction("d", "readwrite"), d = t.objectStore("d"); v == null ? d.delete(k) : d.put(v, k); t.oncomplete = ok; t.onerror = () => red(t.error); }); } catch (e) { } },
+  async oku(k) { try { const db = await this.ac(); return await new Promise((ok, red) => { const r = db.transaction("d").objectStore("d").get(k); r.onsuccess = () => ok(r.result); r.onerror = () => red(r.error); }); } catch (e) { return null; } }
+};
+const METIN_ALANLAR = ["talimat", "ilanMetin", "ada", "parsel", "hisseKoor", "sesAnahtar"], DOSYA_ALANLAR = ["ilanGoruntu", "fotolar", "hisseKml"];
+function dosyaKoy(input, dosyalar) { try { const dt = new DataTransfer(); for (const f of dosyalar) dt.items.add(f); input.files = dt.files; return true; } catch (e) { return false; } }
+async function bilgileriGeriYukle() {   // yenilemeden sonra yazılanlar ve seçilen dosyalar geri gelir
+  try { for (const a of JSON.parse(sakla.oku("ocrOkunan", "[]"))) ocrOkunan.add(a); } catch (e) { }
+  ocrMetni = sakla.oku("ocrMetni", "");
+  let dosyaVar = false;
+  for (const id of DOSYA_ALANLAR) { const d = await dosyaDepo.oku(id); if (d && d.length && dosyaKoy($(id), d)) { dosyaVar = true; if (id !== "hisseKml") $("ilanBolum").open = true; } }
+  const v = await dosyaDepo.oku("sonVideo");
+  if (v && v.size) {
+    sonVideo = v; $("sonKutu").hidden = false;
+    $("sonBilgi").textContent = `Son kaydedilen video: ${v.name} (${(v.size / 1e6).toFixed(1)} MB)`;
+    $("sonPaylas").hidden = !(navigator.canShare && navigator.canShare({ files: [v] }));
+  }
+  return dosyaVar;
+}
+function videoIndir() { if (!sonVideo) return; if (indirAdres) URL.revokeObjectURL(indirAdres); indirAdres = URL.createObjectURL(sonVideo); const a = document.createElement("a"); a.href = indirAdres; a.download = sonVideo.name; document.body.appendChild(a); a.click(); a.remove(); }
+function videoPaylas() { if (sonVideo) navigator.share({ files: [sonVideo], title: sonVideo.name }).catch(() => { }); }
+window.addEventListener("beforeunload", e => {   // hazırlık, okuma ya da kayıt sürerken yanlışlıkla yenilemeye karşı uyarı
+  if (calisiyor || ocrIsleniyor || (kayitci && kayitci.state === "recording")) { e.preventDefault(); e.returnValue = ""; }
+});
 function durum(metin, oran, hata) {
   $("durum").textContent = metin; $("durum").className = hata ? "hata" : "";
   $("cubuk").hidden = oran == null; if (oran != null) $("cubuk").firstElementChild.style.width = Math.round(oran * 100) + "%";
@@ -1607,12 +1640,23 @@ async function formBasla() {
   $("sesAnahtar").value = sakla.oku("sesAnahtar", "");
   $("formMarka").textContent = KART.firma;
   $("kalite").value = sakla.oku("kalite", "720");
-  $("ada").value = q.get("ada") || ""; $("parsel").value = q.get("parsel") || "";
+  $("ada").value = q.get("ada") || sakla.oku("ada", ""); $("parsel").value = q.get("parsel") || sakla.oku("parsel", "");
   $("talimat").value = q.get("talimat") || sakla.oku("talimat", "");
+  $("ilanMetin").value = sakla.oku("ilanMetin", ""); $("hisseKoor").value = sakla.oku("hisseKoor", "");
+  for (const id of METIN_ALANLAR) $(id).addEventListener("input", () => sakla.yaz(id, $(id).value));   // her harf anında kaydedilir
+  $("kalite").addEventListener("change", () => sakla.yaz("kalite", $("kalite").value));
+  for (const id of DOSYA_ALANLAR) $(id).addEventListener("change", () => dosyaDepo.yaz(id, [...($(id).files || [])]));
+  $("sonIndir").onclick = videoIndir; $("sonPaylas").onclick = videoPaylas;
+  const dosyaGeldi = await bilgileriGeriYukle();
+  const yarim = sakla.oku("yarim", "") === "1"; sakla.yaz("yarim", "");
   try { durum("İller yükleniyor…"); await listeleriYukle(q); durum(""); }
   catch (e) { $("il").innerHTML = "<option>Yüklenemedi</option>"; durum("TKGM listeleri alınamadı (" + e.message + "). “Videoyu hazırla”ya bastığınızda yeniden denenir.", null, true); }
-  $("il").onchange = () => ilceYukle().catch(e => durum("İlçeler alınamadı: " + e.message, null, true));
-  $("ilce").onchange = () => mahYukle().catch(e => durum("Mahalleler alınamadı: " + e.message, null, true));
+  if (yarim) durum("Önceki hazırlık sayfa yenilendiği için yarıda kaldı. Bilgileriniz geri yüklendi; “Videoyu hazırla”ya yeniden basın.");
+  else if (dosyaGeldi) durum("Önceki bilgileriniz ve dosyalarınız geri yüklendi.");
+  const secimSakla = () => { for (const [id, k] of [["il", "il"], ["ilce", "ilce"], ["mah", "mah"]]) { const o = $(id).selectedOptions[0]; if (o) sakla.yaz(k, o.textContent); } };
+  $("il").onchange = () => ilceYukle().then(secimSakla).catch(e => durum("İlçeler alınamadı: " + e.message, null, true));
+  $("ilce").onchange = () => mahYukle().then(secimSakla).catch(e => durum("Mahalleler alınamadı: " + e.message, null, true));
+  $("mah").onchange = secimSakla;
   $("basla").onclick = () => { if (!calisiyor) { calistir(); return; } iptalIstendi = true; $("basla").disabled = true; durum("İptal ediliyor…"); };   // çalışırken aynı düğme iptal eder
   $("haritaAc").onclick = haritaAc;
   $("bolgeAc").onclick = bolgeListele;
@@ -1626,16 +1670,16 @@ async function formBasla() {
   $("bOynat").onclick = () => { dugmeKilit(true); oynat(() => dugmeKilit(false)); };
   $("bKaydet").onclick = kaydet;
   $("bYeni").onclick = () => { cancelAnimationFrame(raf); sesDur(); uyanikBirak(); $("sahne").hidden = true; $("form").hidden = false; durum(""); };
-  $("bIndir").onclick = () => { if (indirAdres) URL.revokeObjectURL(indirAdres); indirAdres = URL.createObjectURL(sonVideo); const a = document.createElement("a"); a.href = indirAdres; a.download = sonVideo.name; document.body.appendChild(a); a.click(); a.remove(); };
-  $("bPaylas").onclick = () => navigator.share({ files: [sonVideo], title: sonVideo.name }).catch(() => { });
+  $("bIndir").onclick = videoIndir;
+  $("bPaylas").onclick = videoPaylas;
   if (q.get("oto") && ($("talimat").value.trim() || $("parsel").value)) calistir();
 }
 async function calistir() {   // aynı anda tek üretim; çalışırken düğme "İptal et" olur
   if (calisiyor) return;
-  calisiyor = true; iptalIstendi = false; $("basla").textContent = "İptal et";
+  calisiyor = true; iptalIstendi = false; $("basla").textContent = "İptal et"; sakla.yaz("yarim", "1");
   try { await uret(); }
   catch (e) { if (iptalIstendi) durum("İptal edildi."); else durum(e.message || String(e), null, true); }
-  finally { calisiyor = false; $("basla").textContent = "Videoyu hazırla"; $("basla").disabled = false; if ($("sahne").hidden) uyanikBirak(); }
+  finally { calisiyor = false; sakla.yaz("yarim", ""); $("basla").textContent = "Videoyu hazırla"; $("basla").disabled = false; if ($("sahne").hidden) uyanikBirak(); }
 }
 async function uret() {
   if (navigator.onLine === false) { durum("İnternet bağlantısı yok. Bağlantıyı kontrol edip tekrar deneyin.", null, true); return; }
@@ -1656,7 +1700,7 @@ async function uret() {
   let konum;
   try { konum = await konumUygula(t); } catch (e) { durum("İl, ilçe ya da mahalle listesi alınamadı: " + e.message, null, true); return; }
   if (!konum.tamam) { durum(konum.mesaj, null, true); return; }
-  $("ada").value = ada; $("parsel").value = parsel;
+  $("ada").value = ada; $("parsel").value = parsel; sakla.yaz("ada", ada); sakla.yaz("parsel", parsel);
   durum(`Konum: ${konum.il} / ${konum.ilce} / ${konum.mah} · ${ada} ada ${parsel} parsel` + (konum.uyari ? ` · ${konum.uyari}` : ""));
   if (!sesCtx) sesCtx = new (window.AudioContext || window.webkitAudioContext)();
   sesCtx.resume().catch(() => { });
